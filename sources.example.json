@@ -1,7 +1,7 @@
 {
   "sources": [
     { "provider": "example-gpt", "name": "GPT", "group": "codex", "kind": "magpie" },
-    { "provider": "example-claude", "name": "CC", "group": "claude", "kind": "magpie" },
+    { "provider": "example-claude", "name": "Claude", "group": "claude", "kind": "magpie" },
     { "provider": "example-gemini-one", "name": "AGY", "group": "gemini", "account": "1", "kind": "antigravity", "command": "/path/to/first-account-cli", "enabled": false },
     { "provider": "example-gemini-two", "name": "AGY", "group": "gemini", "account": "2", "kind": "antigravity", "command": "/path/to/second-account-cli", "enabled": false },
     { "provider": "example-devin", "name": "Devin", "group": "devin", "kind": "magpie", "enabled": false },

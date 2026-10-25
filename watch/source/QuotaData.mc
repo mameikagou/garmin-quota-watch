@@ -5,7 +5,7 @@ import Toybox.Time.Gregorian;
 (:glance)
 module QuotaData {
     const KEYS = ["codex", "claude", "gemini", "devin", "opencode", "zcode", "workbuddy"];
-    const LABELS = ["GPT", "CC", "AGY", "DEVIN", "OPENCODE", "ZCODE", "WORKBUDDY"];
+    const LABELS = ["GPT", "Claude", "AGY", "DEVIN", "OPENCODE", "ZCODE", "WORKBUDDY"];
     const COLORS = [0x73ebc0, 0xd97757, 0x4c8cf5, 0xb7a1f8, 0xf6be85, 0xfacc15, 0x22d3ee];
 
     function build(snapshot) as Array<Dictionary> {
@@ -164,27 +164,9 @@ module QuotaData {
     function tiboNotice(snapshot) as Dictionary? {
         if (!(snapshot instanceof Dictionary) || !(snapshot["tibo"] instanceof Dictionary)) { return null; }
         var data = snapshot["tibo"] as Dictionary;
-        var source = data["demo"] == true ? "Tibo 公告 · 演示" : "Tibo 公告 · AIHOT";
         var next = data["next_reset"];
-        if (next instanceof Dictionary) {
-            var message = "预计时间待定";
-            if (next["expected_at_seconds"] != null) {
-                message = "预计 " + countdown(next["expected_at_seconds"]) + " 后重置";
-                if (next["expected_at_seconds"] <= Time.now().value()) { message = "重置时间待确认"; }
-                if (next["expected_at_seconds"] <= Time.now().value() && next["through_seconds"] != null
-                    && next["through_seconds"] > Time.now().value()) { message = "预计重置窗口内"; }
-            }
-            if ("in_progress".equals(next["status"])) { message = "重置发放中"; }
-            if ("reset_credit".equals(next["kind"])) { message = "重置卡 " + message; }
-            return {"source" => source, "text" => message, "color" => 0xffc66d};
-        }
-        var last = data["last_reset"];
-        if (!(last instanceof Dictionary) || last["at_seconds"] == null) { return null; }
-        var days = ((Time.now().value() - last["at_seconds"]) / 86400.0).toNumber();
-        if (days < 0) { days = 0; }
-        var age = days == 0 ? "今天" : days.toString() + "天前";
-        var label = "confirmation_post".equals(last["basis"]) ? "上次确认 " : "上次重置 ";
-        return {"source" => source, "text" => label + age, "color" => 0x82929e};
+        if (!(next instanceof Dictionary) || next["expected_at_seconds"] == null) { return null; }
+        return {"text" => "Tibo " + countdown(next["expected_at_seconds"]) + " 后", "color" => 0xffc66d};
     }
 
     function glanceValue(groups as Array<Dictionary>, key as String, period as String) as Dictionary? {

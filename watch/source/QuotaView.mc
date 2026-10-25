@@ -92,7 +92,7 @@ class QuotaView extends QuotaCanvas {
             var group = groups[index] as Dictionary;
             var rows = group["rows"] as Array<Dictionary>;
             var height = 42 + rows.size() * 44;
-            if ("codex".equals(group["key"]) && QuotaData.tiboNotice(getQuotaApp().snapshot) != null) { height += 56; }
+            if ("codex".equals(group["key"]) && QuotaData.tiboNotice(getQuotaApp().snapshot) != null) { height += 34; }
             if (top + height > 50 && top < 390) { drawCard(dc, group, top, height, index); }
             top += height + 10;
         }
@@ -125,8 +125,7 @@ class QuotaView extends QuotaCanvas {
         if (notice == null) { return; }
         dc.setColor(0x293440, Graphics.COLOR_TRANSPARENT);
         dc.drawLine(bounds[0], bounds[1], bounds[0] + bounds[2], bounds[1]);
-        text(dc, bounds[0], bounds[1] + 4, notice["source"], small, 0x82929e);
-        text(dc, bounds[0], bounds[1] + 28, cropped(dc, notice["text"], bounds[2], small), small, notice["color"]);
+        text(dc, bounds[0], bounds[1] + 6, cropped(dc, notice["text"], bounds[2], small), small, notice["color"]);
     }
     function drawRow(dc, bounds as Array, row as Dictionary, accent) {
         var left = bounds[0];
@@ -285,7 +284,6 @@ class QuotaGlance extends WatchUi.GlanceView {
         draw(dc, width - dc.getTextWidthInPixels(time, _small) - 5, 4, time, _small, 0x82929e);
         var row = QuotaData.glanceValue(getQuotaApp().groups, QuotaVariant.KEY, "周");
         if (row == null) { return; }
-        draw(dc, 5, 31, "周剩余", _label, 0xc0cedb);
         draw(dc, 5, 59, QuotaData.countdown(row["stamp"]) + " 后", _small, 0x82929e);
         var value = QuotaData.value(row);
         draw(dc, width - dc.getTextWidthInPixels(value, _number) - 5, 19, value, _number,
@@ -300,8 +298,7 @@ class QuotaGlance extends WatchUi.GlanceView {
         if ("codex".equals(QuotaVariant.KEY)) {
             var notice = QuotaData.tiboNotice(getQuotaApp().snapshot);
             if (notice != null) {
-                draw(dc, 5, height - 49, notice["source"], _small, 0x82929e);
-                draw(dc, 5, height - 26, notice["text"], _small, notice["color"]);
+                draw(dc, 5, height - 28, notice["text"], _small, notice["color"]);
             }
         } else {
             var balance = QuotaData.glanceValue(getQuotaApp().groups, QuotaVariant.KEY, "余额");
