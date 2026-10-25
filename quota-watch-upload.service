@@ -1,0 +1,11 @@
+[Unit]
+Description=Upload model quotas for Garmin
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/path/to/garmin-quota-watch
+EnvironmentFile=%h/.config/quota-watch/upload.env
+ExecStart=/usr/bin/env node upload.mjs
+TimeoutStartSec=100
+UMask=0077

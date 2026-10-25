@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>手表额度 · GPT / CC</title>
+  <style>
+    :root { color-scheme:dark; font-family:system-ui,"Noto Sans CJK SC",sans-serif; color:#eef3f7; background:#090b0d; }
+    * { box-sizing:border-box; }
+    body { margin:0; }
+    main { max-width:960px; margin:auto; padding:40px 20px 64px; }
+    .eyebrow { color:#73ebc0; font-size:13px; letter-spacing:2px; }
+    h1 { font-size:clamp(30px,6vw,48px); line-height:1.15; margin:14px 0; letter-spacing:-1px; }
+    p { color:#9aaab8; line-height:1.8; margin:8px 0 20px; }
+    .downloads { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:28px 0 32px; }
+    .download-prg { display:flex; align-items:center; gap:14px; color:inherit; text-decoration:none; background:#141a20; border:1px solid #2c3843; border-radius:18px; padding:20px; }
+    .download-prg:hover { border-color:#73ebc0; background:#1a232b; }
+    .download-prg .symbol { width:48px; height:48px; border-radius:50%; display:grid; place-items:center; background:#243b35; color:#73ebc0; font-size:24px; }
+    .download-prg strong { display:block; font-size:22px; }
+    .download-prg span { display:block; color:#9aaab8; font-size:13px; margin-top:4px; }
+    .gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+    figure { margin:0; padding:22px 16px; border:1px solid #232d36; border-radius:22px; background:#101419; scroll-margin-top:16px; }
+    figure img { display:block; width:100%; max-width:390px; margin:auto; height:auto; border-radius:50%; background:#000; }
+    figcaption { max-width:390px; margin:18px auto 0; }
+    h2 { font-size:20px; margin:0 0 6px; }
+    figcaption p { font-size:14px; margin:0; }
+    .badge { display:inline-block; border:1px solid #8c6632; color:#ffc66d; background:#322619; border-radius:6px; padding:2px 7px; font-size:12px; margin-bottom:10px; }
+    .source { font-size:14px; margin-top:28px; }
+    .source a { color:#9fb6c9; }
+    @media(max-width:620px) { main { padding:24px 12px 40px; } .gallery { grid-template-columns:1fr; } .downloads { gap:10px; } .download-prg { padding:15px 12px; gap:9px; } .download-prg img { width:36px; height:36px; } .download-prg strong { font-size:20px; } .download-prg span { font-size:11px; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">VÍVOACTIVE 5 · 个人额度</div>
+  <h1>抬腕，看清剩余额度。</h1>
+  <p>GPT、CC 独立概览，点开后共用完整额度列表。文字与数字放大，支持连续滑动和分账号详情。</p>
+  <div class="downloads">
+    <a class="download-prg" href="/GPT.prg" download="GPT.prg"><span class="symbol">G</span><div><strong>下载 GPT</strong><span>独立概览 · 个人安装</span></div></a>
+    <a class="download-prg" href="/CC.prg" download="CC.prg"><span class="symbol">C</span><div><strong>下载 CC</strong><span>独立概览 · 个人安装</span></div></a>
+  </div>
+  <p>截图和安装包由部署者在本地生成并放入 public 目录，文件齐备后可在此预览和下载。</p>
+  <section class="gallery" id="simulator-results" aria-label="模拟器截图">
+    <figure id="home"><a href="/simulator.png"><img src="/simulator.png" alt="完整额度列表主页"></a><figcaption><h2>主页</h2><p>GPT → CC → AGY → Devin → OpenCode → ZCode → WorkBuddy。GPT 卡片单独列出 Tibo 公告信息。</p></figcaption></figure>
+    <figure id="detail"><a href="/simulator-detail.png"><img src="/simulator-detail.png" alt="分账号额度详情"></a><figcaption><h2>详情页</h2><p>查看每个账号、每个周期的用量与具体重置时间。</p></figcaption></figure>
+    <figure id="gpt-announced"><a href="/simulator-gpt-announced.png"><img src="/simulator-gpt-announced.png" alt="GPT 概览，有 Tibo 预告的演示"></a><figcaption><span class="badge">Tibo 预告使用演示数据</span><h2>GPT · 有预告</h2><p>预计生效倒计时用醒目颜色显示。账号额度读取真实数据，公告来自独立的预告演示。</p></figcaption></figure>
+    <figure id="gpt"><a href="/simulator-gpt.png"><img src="/simulator-gpt.png" alt="GPT 概览，无新预告的真实数据"></a><figcaption><h2>GPT · 无新预告</h2><p>显示上次重置或确认公告距今多久，使用较淡的文字。</p></figcaption></figure>
+    <figure id="cc"><a href="/simulator-cc.png"><img src="/simulator-cc.png" alt="CC 独立概览"></a><figcaption><h2>CC · 独立概览</h2><p>大字显示 CC 剩余百分比和美元余额。</p></figcaption></figure>
+  </section>
+  <p class="source">Tibo 公告由 <a href="https://aihot.news/codex-reset">AIHOT</a> 整理，预计时间保留公告与估计的性质。账号额度以 Magpie 为准，AGY 使用两个独立账号的原生读数。预览设备为 vívoactive 5。</p>
+</main>
+</body>
+</html>

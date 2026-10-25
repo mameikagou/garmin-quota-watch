@@ -1,0 +1,19 @@
+{
+  "name": "quota-watch",
+  "private": true,
+  "license": "MIT",
+  "description": "Garmin Connect IQ widgets for AI subscription quotas and Tibo reset announcements.",
+  "engines": { "node": ">=24" },
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "upload": "node upload.mjs",
+    "build:watch": "node watch/build.mjs",
+    "verify": "node verify.mjs"
+  },
+  "devDependencies": {
+    "fast-xml-parser": "^5.11.2",
+    "wrangler": "^4.152.0"
+  }
+}

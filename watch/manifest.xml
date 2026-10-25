@@ -1,0 +1,8 @@
+<iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
+    <iq:application id="b9a68e252d4a461d9f2ce6cb6ef8cd10" type="widget" name="@Strings.AppName" entry="QuotaApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="4.2.0">
+        <iq:products><iq:product id="vivoactive5"/></iq:products>
+        <iq:permissions><iq:uses-permission id="Communications"/></iq:permissions>
+        <iq:languages><iq:language>eng</iq:language><iq:language>zhs</iq:language></iq:languages>
+        <iq:barrels/>
+    </iq:application>
+</iq:manifest>

@@ -1,0 +1,9 @@
+Noto Sans CJK SC bitmap subsets
+
+Source: https://github.com/notofonts/noto-cjk
+License: SIL Open Font License 1.1; see OFL.txt.
+Copyright 2014-2021 Adobe (http://www.adobe.com/).
+
+These bitmap atlases are subsets of the Simplified Chinese face in Noto Sans
+CJK. They were converted with fonttools and fontbm for Connect IQ, with only
+the characters used by this interface. The font files remain under OFL 1.1.

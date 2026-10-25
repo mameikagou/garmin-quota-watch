@@ -1,0 +1,3 @@
+project.manifest = private/GPT/manifest.xml
+base.sourcePath = source;private/GPT/source
+base.resourcePath = resources;private/resources;private/GPT/resources
