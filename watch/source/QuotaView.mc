@@ -204,7 +204,7 @@ class QuotaDetail extends QuotaCanvas {
     }
     function drawAccount(dc, group as Dictionary, account as Dictionary, top, showName) {
         var accountName = account["account"];
-        if ("workbuddy".equals(group["key"])) { accountName = account["region"]; }
+        if ("workbuddy".equals(group["key"])) { accountName = QuotaData.regionLabel(account["region"]); }
         if (showName && !"zcode".equals(group["key"])
                 && accountName != null && accountName.length() > 0) {
             centered(dc, top, accountName, label, 0x8fa0af);

@@ -48,7 +48,7 @@ for (const provider of sources.filter((source) => ["zcode", "workbuddy"].include
   for (const card of cards) {
     assert.equal(card.error, undefined);
     assert.equal(card.source, "magpie");
-    assert(["国内", "国外"].includes(card.region));
+    assert(["local", "global"].includes(card.region));
     assert.equal(card.account, card.region);
     assert(Number.isFinite(Date.parse(card.source_read_at)));
     assert(card.windows.length > 0);
@@ -57,7 +57,7 @@ for (const provider of sources.filter((source) => ["zcode", "workbuddy"].include
 }
 for (const group of ["zcode", "workbuddy"]) {
   const cards = snapshot.cards.filter((card) => card.group === group && !card.error);
-  for (const region of ["国内", "国外"]) {
+  for (const region of ["local", "global"]) {
     assert(cards.some((card) => card.region === region), `${group} 缺少${region}账号`);
   }
 }

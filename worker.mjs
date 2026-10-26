@@ -23,7 +23,7 @@ function validCard(card) {
     && typeof card.name === "string" && card.name.length <= 80
     && Array.isArray(card.windows) && card.windows.length <= 32
     && (!["zcode", "workbuddy"].includes(card.group) || card.error
-      || ["国内", "国外"].includes(card.region));
+      || ["local", "global"].includes(card.region));
 }
 
 function validCollectionAttempts(attempts) {

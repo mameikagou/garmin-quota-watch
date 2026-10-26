@@ -11,7 +11,7 @@ module QuotaData {
     function groupAccounts(cards as Array, key as String) as Array<Dictionary> {
         var result = [] as Array<Dictionary>;
         if (key.equals("zcode") || key.equals("workbuddy")) {
-            var regions = ["国内", "国外"];
+            var regions = ["local", "global"];
             for (var regionIndex = 0; regionIndex < regions.size(); regionIndex++) {
                 for (var position = 0; position < cards.size(); position++) {
                     var account = cards[position];
@@ -79,13 +79,17 @@ module QuotaData {
         return (window["name"] as String).find("Flash") == null ? "5.3" : "Flash";
     }
 
+    function regionLabel(region as String) as String {
+        return region.equals("local") ? "Local" : "Global";
+    }
+
     function zcodeLabel(account as Dictionary, window as Dictionary, available as Array<Dictionary>) as String {
         var model = zcodeModel(window);
         var matches = 0;
         for (var index = 0; index < available.size(); index++) {
             if (model.equals(zcodeModel(available[index]))) { matches += 1; }
         }
-        var result = account["region"] + " " + model;
+        var result = regionLabel(account["region"]) + " " + model;
         if (matches > 1) {
             result += (window["name"] as String).find("Start Plan") == null ? " 活动" : " 起步";
         }
@@ -105,7 +109,9 @@ module QuotaData {
                 if ("zcode".equals(group["key"])) {
                     row["label"] = zcodeLabel(account, window, available);
                 }
-                if ("workbuddy".equals(group["key"])) { creditRow(row, window, account["region"]); }
+                if ("workbuddy".equals(group["key"])) {
+                    creditRow(row, window, regionLabel(account["region"]));
+                }
                 result.add(row);
             }
         }

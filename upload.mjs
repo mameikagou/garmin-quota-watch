@@ -49,8 +49,8 @@ function zcodeRegion(auth) {
   try { login = JSON.parse(auth.refresh); }
   catch { return null; }
   const base = typeof login.base === "string" ? login.base : "";
-  if (login.site === "bigmodel" || base.startsWith("https://open.bigmodel.cn/")) return "国内";
-  if (login.site === "zai" || base.startsWith("https://api.z.ai/")) return "国外";
+  if (login.site === "bigmodel" || base.startsWith("https://open.bigmodel.cn/")) return "local";
+  if (login.site === "zai" || base.startsWith("https://api.z.ai/")) return "global";
   return null;
 }
 
