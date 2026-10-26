@@ -10,7 +10,7 @@
 
 五分钟冷却使同一家上游在任意连续一天最多被真实采集 288 次，包含定时和按需两种入口，按需刷新不会提高原有定时任务的最坏请求数。同组的多个账号各自最多也是 288 次。
 
-按十五秒轮询计算，本机刷新进程每天向 Worker 发 5,760 次请求。队列和按需结果由 SQLite Durable Object 保存，因此轮询产生 0 次 KV 读取、0 次 KV 写入、0 次 KV 列举；原有五分钟上传每天最多写 KV 288 次，只有 Tibo 缺失时才读取旧值，最多再读 KV 288 次。手表每次进入详情页另有一次触发请求和最多八次 KV 读取。即使七组来源都持续触发，按每天最多 2,016 次按需采集且每次都读满八次计算，Worker 与 Durable Object 请求、Durable Object 行读取均不超过 26,208 次，Durable Object 行写入不超过 4,320 次，KV 读取不超过 16,416 次，KV 写入固定为 288 次，KV 列举和删除均为 0 次，均低于免费额度。额度依据 [Workers KV](https://developers.cloudflare.com/kv/platform/pricing/) 与 [Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/) 的免费方案。
+按十五秒轮询计算，本机刷新进程每天向 Worker 发 5,760 次请求。队列和按需结果由 SQLite Durable Object 保存，因此轮询产生 0 次 KV 读取、0 次 KV 写入、0 次 KV 列举；原有五分钟上传每天最多写 KV 288 次，只有 Tibo 缺失时才读取旧值，最多再读 KV 288 次。手表每次进入详情页另有一次触发请求和最多八次 KV 读取。达到七组每五分钟各采集一次的上限，并按每次采集对应一次详情请求、读满八次计算，Worker 与 Durable Object 请求、Durable Object 行读取均不超过 26,208 次，Durable Object 行写入不超过 4,320 次，KV 读取不超过 16,416 次，KV 写入固定为 288 次，KV 列举和删除均为 0 次，均低于免费额度。冷却期内重复进入详情页，每次只增加两次 Worker 与 Durable Object 请求、一次 KV 读取，不增加存储写入或上游采集。额度依据 [Workers KV](https://developers.cloudflare.com/kv/platform/pricing/) 与 [Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/) 的免费方案。
 
 Tibo 公告来自 [AIHOT 的公开 API](https://aihot.news/openapi-v1.json)，匿名访问，每十分钟最多请求一次，支持 ETag、压缩和失败保留。有效预告显示为一行醒目的“Tibo 2h 后”倒计时，没有预告时留空。使用该接口须遵守来源的个人非商业使用条件。
 
