@@ -29,16 +29,67 @@ function eventSummary(event) {
   };
 }
 
+const beijingFormatter = new Intl.DateTimeFormat("en", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+function beijingDate(value) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const stamp = typeof value === "number" ? value : Date.parse(value);
+  if (!Number.isFinite(stamp)) return null;
+  const parts = Object.fromEntries(beijingFormatter.formatToParts(stamp)
+    .filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function predictionSummary(event) {
+  const precision = event.schedule?.precision ?? (event.estimate ? "estimate" : "date");
+  let expectedAt = null;
+  let predictionDate = null;
+  let deadline = false;
+  if (event.schedule) {
+    const scheduled = event.schedule;
+    if (precision === "date") {
+      predictionDate = beijingDate(scheduled.through ?? scheduled.from);
+    } else {
+      deadline = precision === "deadline" || precision === "window";
+      expectedAt = deadline ? (scheduled.through ?? scheduled.from) : scheduled.from;
+      predictionDate = beijingDate(expectedAt);
+    }
+  } else if (event.estimate) {
+    deadline = true;
+    expectedAt = event.estimate.through ?? event.estimate.from;
+    predictionDate = beijingDate(expectedAt);
+  } else {
+    predictionDate = beijingDate(event.occurredOn ?? event.confirmedAt);
+  }
+  if (!predictionDate) return null;
+  const expected = Date.parse(expectedAt);
+  const throughAt = event.schedule?.through ?? event.estimate?.through;
+  const through = Date.parse(throughAt);
+  const dateSeconds = Date.parse(`${predictionDate}T00:00:00+08:00`) / 1000;
+  return {
+    ...eventSummary(event),
+    status: event.presentation?.status ?? event.status,
+    confirmed: event.status === "confirmed",
+    precision,
+    date: predictionDate,
+    date_seconds: dateSeconds,
+    ...(Number.isFinite(expected) ? { expected_at: expectedAt, expected_at_seconds: expected / 1000 } : {}),
+    ...(Number.isFinite(through) ? {
+      through: throughAt,
+      through_seconds: through / 1000,
+    } : {}),
+    deadline,
+  };
+}
+
 function summarize(data, previous) {
-  const now = Date.now();
-  const pending = data.events.filter((event) => event.status === "announced"
-    && event.presentation?.status !== "likely_completed"
-    && Date.parse(event.schedule?.from ?? event.estimate?.from) > now);
-  pending.sort((left, right) => {
-    const leftTime = Date.parse(left.schedule?.from ?? left.estimate?.from);
-    const rightTime = Date.parse(right.schedule?.from ?? right.estimate?.from);
-    return (Number.isFinite(leftTime) ? leftTime : Infinity) - (Number.isFinite(rightTime) ? rightTime : Infinity);
-  });
+  const today = beijingDate(Date.now());
+  const predictions = data.events.map(predictionSummary)
+    .filter((prediction) => prediction != null && prediction.date >= today);
+  predictions.sort((left, right) => left.date_seconds - right.date_seconds
+    || (left.expected_at_seconds ?? left.date_seconds) - (right.expected_at_seconds ?? right.date_seconds));
   const confirmed = data.events.filter((event) => event.status === "confirmed"
     && Number.isFinite(Date.parse(event.occurredOn ?? event.confirmedAt)));
   confirmed.sort((left, right) => Date.parse(right.occurredOn ?? right.confirmedAt)
@@ -55,28 +106,13 @@ function summarize(data, previous) {
     // recent 窗口之外的最近一次确认仍可保留；窗口内的撤回按新响应更新。
     last = previous.last_reset;
   }
-  const event = pending[0];
-  let next = null;
-  if (event) {
-    const window = event.schedule ?? event.estimate;
-    const expected = Date.parse(window?.from);
-    let timeBasis = "unspecified";
-    if (event.schedule) timeBasis = "source_schedule";
-    else if (event.estimate) timeBasis = `estimate_${event.estimate.basis}`;
-    next = { ...eventSummary(event), status: event.presentation?.status ?? "announced",
-      ...(Number.isFinite(expected) ? { expected_at: window.from, expected_at_seconds: expected / 1000 } : {}),
-      ...(window?.through ? { through: window.through, through_seconds: Date.parse(window.through) / 1000 } : {}),
-      time_basis: timeBasis };
-  }
   return { source: "AIHOT", source_url: endpoint, checked_at: data.checkedAt,
-    next_reset: next, last_reset: last };
+    next_reset: predictions[0] ?? null, last_reset: last };
 }
 
-function currentSummary(summary) {
-  if (!summary?.next_reset) return summary;
-  const expected = summary.next_reset.expected_at_seconds * 1000;
-  if (Number.isFinite(expected) && expected > Date.now()) return summary;
-  return { ...summary, next_reset: null };
+function cacheSummary(cache) {
+  if (Array.isArray(cache.response?.events)) return summarize(cache.response, cache.summary);
+  return cache.summary ?? null;
 }
 
 function nextRequest(response, now) {
@@ -91,7 +127,7 @@ function nextRequest(response, now) {
 async function refresh() {
   const cache = await readCache();
   const now = Date.now();
-  if (now < (cache.next_request_at ?? 0)) return currentSummary(cache.summary ?? null);
+  if (now < (cache.next_request_at ?? 0)) return cacheSummary(cache);
   cache.next_request_at = now + minimumInterval;
   cache.attempted_at = new Date(now).toISOString();
   await saveCache(cache);
@@ -108,6 +144,7 @@ async function refresh() {
     if (response.status === 304) {
       cache.etag = response.headers.get("etag") ?? cache.etag;
       cache.validated_at = new Date().toISOString();
+      cache.summary = cacheSummary(cache);
     } else if (response.ok) {
       const data = await response.json();
       if (!Array.isArray(data.events)) throw new Error("AIHOT 未返回事件列表");
@@ -124,7 +161,7 @@ async function refresh() {
     console.error(`Tibo 监控保留上次结果：${error.message}`);
   }
   await saveCache(cache);
-  return currentSummary(cache.summary ?? null);
+  return cacheSummary(cache);
 }
 
 export async function collectTibo() {
@@ -136,7 +173,7 @@ export async function collectTibo() {
     return JSON.parse(stdout);
   } catch (error) {
     console.error(`Tibo 监控保留上次结果：${error.message}`);
-    try { return currentSummary((await readCache()).summary ?? null); }
+    try { return cacheSummary(await readCache()); }
     catch { return null; }
   }
 }

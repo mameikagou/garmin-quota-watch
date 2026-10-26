@@ -161,14 +161,64 @@ module QuotaData {
         return info.hour.format("%02d") + ":" + info.min.format("%02d") + " 更新";
     }
 
+    function beijingDay(stamp) as Number {
+        return ((stamp.toNumber() + 28800) / 86400).toNumber();
+    }
+
+    function beijingInfo(stamp) {
+        return Gregorian.utcInfo(new Time.Moment(stamp.toNumber() + 28800), Time.FORMAT_SHORT);
+    }
+
+    function tiboDayLabel(stamp, today) as String {
+        var day = beijingDay(stamp);
+        if (day == today) { return "今天"; }
+        if (day == today + 1) { return "明天"; }
+        var info = beijingInfo(stamp);
+        return info.month.format("%02d") + "." + info.day.format("%02d");
+    }
+
+    function tiboMessage(textValue as String) as Dictionary {
+        return {"text" => textValue, "color" => 0xffc66d};
+    }
+
+    function tiboDeadline(next as Dictionary) as Boolean {
+        if (next["deadline"] == true) { return true; }
+        var precision = next["precision"];
+        return precision != null && (precision.equals("deadline") || precision.equals("window")
+            || precision.equals("estimate"));
+    }
+
     function tiboNotice(snapshot) as Dictionary? {
         if (!(snapshot instanceof Dictionary) || !(snapshot["tibo"] instanceof Dictionary)) { return null; }
         var data = snapshot["tibo"] as Dictionary;
         var next = data["next_reset"];
-        if (!(next instanceof Dictionary) || next["expected_at_seconds"] == null) { return null; }
-        var expected = next["expected_at_seconds"];
-        if (expected <= Time.now().value()) { return null; }
-        return {"text" => "Tibo " + countdown(expected) + " 后", "color" => 0xffc66d};
+        var now = Time.now().value();
+        var today = beijingDay(now);
+        if (next instanceof Dictionary) {
+            var expected = next["expected_at_seconds"];
+            var dateStamp = next["date_seconds"];
+            if (dateStamp == null) { dateStamp = expected; }
+            if (dateStamp != null && beijingDay(dateStamp) >= today) {
+                var status = next["status"];
+                var confirmed = next["confirmed"] == true || (status != null && status.equals("confirmed"));
+                if (beijingDay(dateStamp) == today && (confirmed || (expected != null && expected <= now))) {
+                    return tiboMessage("Tibo 已重置");
+                }
+                var dayLabel = tiboDayLabel(dateStamp, today);
+                if (expected == null) { return tiboMessage("Tibo " + dayLabel + "重置"); }
+                var info = beijingInfo(expected);
+                var textValue = "Tibo " + dayLabel + " " + info.hour.format("%02d") + ":"
+                    + info.min.format("%02d");
+                if (tiboDeadline(next)) { textValue += " 前"; }
+                return tiboMessage(textValue);
+            }
+        }
+        var last = data["last_reset"];
+        if (last instanceof Dictionary && last["at_seconds"] != null
+                && beijingDay(last["at_seconds"]) == today) {
+            return tiboMessage("Tibo 已重置");
+        }
+        return null;
     }
 
     function glanceValue(groups as Array<Dictionary>, key as String, period as String) as Dictionary? {

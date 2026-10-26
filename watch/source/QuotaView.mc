@@ -125,7 +125,7 @@ class QuotaView extends QuotaCanvas {
         if (notice == null) { return; }
         dc.setColor(0x293440, Graphics.COLOR_TRANSPARENT);
         dc.drawLine(bounds[0], bounds[1], bounds[0] + bounds[2], bounds[1]);
-        text(dc, bounds[0], bounds[1] + 6, cropped(dc, notice["text"], bounds[2], small), small, notice["color"]);
+        text(dc, bounds[0], bounds[1] + 6, notice["text"], small, notice["color"]);
     }
     function drawRow(dc, bounds as Array, row as Dictionary, accent) {
         var left = bounds[0];
