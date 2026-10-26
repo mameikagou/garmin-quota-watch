@@ -166,7 +166,9 @@ module QuotaData {
         var data = snapshot["tibo"] as Dictionary;
         var next = data["next_reset"];
         if (!(next instanceof Dictionary) || next["expected_at_seconds"] == null) { return null; }
-        return {"text" => "Tibo " + countdown(next["expected_at_seconds"]) + " 后", "color" => 0xffc66d};
+        var expected = next["expected_at_seconds"];
+        if (expected <= Time.now().value()) { return null; }
+        return {"text" => "Tibo " + countdown(expected) + " 后", "color" => 0xffc66d};
     }
 
     function glanceValue(groups as Array<Dictionary>, key as String, period as String) as Dictionary? {

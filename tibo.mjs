@@ -30,8 +30,10 @@ function eventSummary(event) {
 }
 
 function summarize(data, previous) {
+  const now = Date.now();
   const pending = data.events.filter((event) => event.status === "announced"
-    && event.presentation?.status !== "likely_completed");
+    && event.presentation?.status !== "likely_completed"
+    && Date.parse(event.schedule?.from ?? event.estimate?.from) > now);
   pending.sort((left, right) => {
     const leftTime = Date.parse(left.schedule?.from ?? left.estimate?.from);
     const rightTime = Date.parse(right.schedule?.from ?? right.estimate?.from);
@@ -70,6 +72,13 @@ function summarize(data, previous) {
     next_reset: next, last_reset: last };
 }
 
+function currentSummary(summary) {
+  if (!summary?.next_reset) return summary;
+  const expected = summary.next_reset.expected_at_seconds * 1000;
+  if (Number.isFinite(expected) && expected > Date.now()) return summary;
+  return { ...summary, next_reset: null };
+}
+
 function nextRequest(response, now) {
   const retry = response.headers.get("retry-after");
   const retryTime = /^\d+$/.test(retry ?? "") ? now + Number(retry) * 1000 : Date.parse(retry);
@@ -82,7 +91,7 @@ function nextRequest(response, now) {
 async function refresh() {
   const cache = await readCache();
   const now = Date.now();
-  if (now < (cache.next_request_at ?? 0)) return cache.summary ?? null;
+  if (now < (cache.next_request_at ?? 0)) return currentSummary(cache.summary ?? null);
   cache.next_request_at = now + minimumInterval;
   cache.attempted_at = new Date(now).toISOString();
   await saveCache(cache);
@@ -115,7 +124,7 @@ async function refresh() {
     console.error(`Tibo 监控保留上次结果：${error.message}`);
   }
   await saveCache(cache);
-  return cache.summary ?? null;
+  return currentSummary(cache.summary ?? null);
 }
 
 export async function collectTibo() {
@@ -127,7 +136,7 @@ export async function collectTibo() {
     return JSON.parse(stdout);
   } catch (error) {
     console.error(`Tibo 监控保留上次结果：${error.message}`);
-    try { return (await readCache()).summary ?? null; }
+    try { return currentSummary((await readCache()).summary ?? null); }
     catch { return null; }
   }
 }
