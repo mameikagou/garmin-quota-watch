@@ -21,7 +21,9 @@ function authorized(request, secret) {
 function validCard(card) {
   return card && typeof card.provider === "string" && card.provider.length > 0 && card.provider.length <= 80
     && typeof card.name === "string" && card.name.length <= 80
-    && Array.isArray(card.windows) && card.windows.length <= 32;
+    && Array.isArray(card.windows) && card.windows.length <= 32
+    && (!["zcode", "workbuddy"].includes(card.group) || card.error
+      || ["国内", "国外"].includes(card.region));
 }
 
 function validCollectionAttempts(attempts) {

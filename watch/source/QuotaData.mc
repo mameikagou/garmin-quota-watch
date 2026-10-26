@@ -8,18 +8,36 @@ module QuotaData {
     const LABELS = ["GPT", "Claude", "AGY", "DEVIN", "OPENCODE", "ZCODE", "WORKBUDDY"];
     const COLORS = [0x73ebc0, 0xd97757, 0x4c8cf5, 0xb7a1f8, 0xf6be85, 0xfacc15, 0x22d3ee];
 
+    function groupAccounts(cards as Array, key as String) as Array<Dictionary> {
+        var result = [] as Array<Dictionary>;
+        if (key.equals("zcode") || key.equals("workbuddy")) {
+            var regions = ["国内", "国外"];
+            for (var regionIndex = 0; regionIndex < regions.size(); regionIndex++) {
+                for (var position = 0; position < cards.size(); position++) {
+                    var account = cards[position];
+                    if (account instanceof Dictionary && key.equals(account["group"])
+                            && regions[regionIndex].equals(account["region"]) && account["error"] == null) {
+                        result.add(account);
+                    }
+                }
+            }
+            return result;
+        }
+        for (var position = 0; position < cards.size(); position++) {
+            var account = cards[position];
+            if (account instanceof Dictionary && key.equals(account["group"]) && account["error"] == null) {
+                result.add(account);
+            }
+        }
+        return result;
+    }
+
     function build(snapshot) as Array<Dictionary> {
         var result = [] as Array<Dictionary>;
         if (!(snapshot instanceof Dictionary) || !(snapshot["cards"] instanceof Array)) { return result; }
         var cards = snapshot["cards"] as Array;
         for (var index = 0; index < KEYS.size(); index++) {
-            var accounts = [] as Array<Dictionary>;
-            for (var position = 0; position < cards.size(); position++) {
-                var account = cards[position];
-                if (account instanceof Dictionary && KEYS[index].equals(account["group"]) && account["error"] == null) {
-                    accounts.add(account);
-                }
-            }
+            var accounts = groupAccounts(cards, KEYS[index]);
             if (accounts.size() == 0) { continue; }
             var group = {"key" => KEYS[index], "title" => LABELS[index], "color" => COLORS[index], "accounts" => accounts};
             group["rows"] = rows(group);
@@ -67,7 +85,7 @@ module QuotaData {
         for (var index = 0; index < available.size(); index++) {
             if (model.equals(zcodeModel(available[index]))) { matches += 1; }
         }
-        var result = account["account"] + " " + model;
+        var result = account["region"] + " " + model;
         if (matches > 1) {
             result += (window["name"] as String).find("Start Plan") == null ? " 活动" : " 起步";
         }
@@ -87,7 +105,7 @@ module QuotaData {
                 if ("zcode".equals(group["key"])) {
                     row["label"] = zcodeLabel(account, window, available);
                 }
-                if ("workbuddy".equals(group["key"])) { creditRow(row, window, account["account"]); }
+                if ("workbuddy".equals(group["key"])) { creditRow(row, window, account["region"]); }
                 result.add(row);
             }
         }

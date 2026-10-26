@@ -203,9 +203,11 @@ class QuotaDetail extends QuotaCanvas {
         contentHeight = top + offset + 16;
     }
     function drawAccount(dc, group as Dictionary, account as Dictionary, top, showName) {
+        var accountName = account["account"];
+        if ("workbuddy".equals(group["key"])) { accountName = account["region"]; }
         if (showName && !"zcode".equals(group["key"])
-                && account["account"] != null && account["account"].length() > 0) {
-            centered(dc, top, account["account"], label, 0x8fa0af);
+                && accountName != null && accountName.length() > 0) {
+            centered(dc, top, accountName, label, 0x8fa0af);
             top += 32;
         }
         var available = QuotaData.windows(group["key"], account, true);

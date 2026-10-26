@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -10,8 +11,9 @@ import { collectionCooldownMilliseconds } from "./refresh-policy.mjs";
 
 const execute = promisify(execFile);
 const collectionDirectory = join(configDirectory, "collections");
+const magpieConfigDirectory = process.env.MAGPIE_CONFIG_DIR ?? join(homedir(), ".config/magpie");
 
-function summary(card, source, account) {
+function summary(card, source, account, region) {
   const windows = (card.windows ?? []).map((window) => {
     const result = { name: window.name, used: window.used, remaining: window.remaining };
     for (const key of ["resetsAt", "amount", "limit", "unit", "pool", "display"]) {
@@ -26,6 +28,7 @@ function summary(card, source, account) {
     name: source.name,
     group: source.group,
     account,
+    ...(region ? { region } : {}),
     source_read_at: card.readAt ?? null,
     windows,
     ...(card.error ? { error: "额度查询失败" } : {}),
@@ -40,6 +43,45 @@ function summary(card, source, account) {
   return result;
 }
 
+function zcodeRegion(auth) {
+  if (!auth || typeof auth.refresh !== "string") return null;
+  let login;
+  try { login = JSON.parse(auth.refresh); }
+  catch { return null; }
+  const base = typeof login.base === "string" ? login.base : "";
+  if (login.site === "bigmodel" || base.startsWith("https://open.bigmodel.cn/")) return "国内";
+  if (login.site === "zai" || base.startsWith("https://api.z.ai/")) return "国外";
+  return null;
+}
+
+async function loadZcodeRegions() {
+  const regions = new Map();
+  try {
+    const [loginText, authText] = await Promise.all([
+      readFile(join(magpieConfigDirectory, "logins.json"), "utf8"),
+      readFile(join(magpieConfigDirectory, "plugin-auth.json"), "utf8"),
+    ]);
+    const logins = JSON.parse(loginText);
+    const auth = JSON.parse(authText);
+    for (const login of logins) {
+      if (login.agent !== "plugin:zcode" || typeof login.user !== "string") continue;
+      const region = zcodeRegion(auth[login.home]);
+      if (region) regions.set(login.user, region);
+    }
+  } catch {
+    return regions;
+  }
+  return regions;
+}
+
+function failedCard(source, region) {
+  return {
+    provider: source.provider, name: source.name, group: source.group,
+    account: region ?? source.account ?? "", ...(region ? { region } : {}),
+    windows: [], error: "额度查询失败",
+  };
+}
+
 function accountLabel(source, card, labels) {
   if (source.account) return source.account;
   if (!card.user) return card.account ?? "";
@@ -49,7 +91,7 @@ function accountLabel(source, card, labels) {
   return String.fromCharCode(65 + accounts.indexOf(identity));
 }
 
-async function collect(source, labels) {
+async function collect(source, labels, zcodeRegions) {
   try {
     if (source.kind === "antigravity") return await collectAntigravity(source);
     const { stdout } = await execute(process.env.MAGPIE_BIN ?? "magpie", ["quota", "refresh", source.provider, "--json"], {
@@ -57,9 +99,16 @@ async function collect(source, labels) {
     });
     const cards = JSON.parse(stdout).filter((card) => card.provider === source.provider);
     if (!cards.length) throw new Error("No quota card");
-    return cards.map((card) => ({ ...summary(card, source, accountLabel(source, card, labels)), source: "magpie" }));
+    return cards.map((card) => {
+      const region = source.region ?? zcodeRegions.get(card.user);
+      if ((source.group === "zcode" || source.group === "workbuddy") && !region) {
+        return failedCard(source, null);
+      }
+      const account = region ?? accountLabel(source, card, labels);
+      return { ...summary(card, source, account, region), source: "magpie" };
+    });
   } catch {
-    return [{ provider: source.provider, name: source.name, group: source.group, account: source.account ?? "", windows: [], error: "额度查询失败" }];
+    return [failedCard(source, source.region)];
   }
 }
 
@@ -114,7 +163,8 @@ export async function collectSources(selectedSources) {
   try { groupLabels = JSON.parse(await readFile(labelPath, "utf8")); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
   const labels = { [group]: groupLabels };
-  const collected = await Promise.all(selectedSources.map((source) => collect(source, labels)));
+  const zcodeRegions = group === "zcode" ? await loadZcodeRegions() : new Map();
+  const collected = await Promise.all(selectedSources.map((source) => collect(source, labels, zcodeRegions)));
   const cards = collected.flat();
   await mkdir(labelDirectory, { recursive: true, mode: 0o700 });
   await writeFile(labelPath, JSON.stringify(labels[group], null, 2), { mode: 0o600 });

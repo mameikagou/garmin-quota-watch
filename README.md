@@ -2,7 +2,7 @@
 
 在 Garmin vívoactive 5 上查看 AI 订阅额度、各周期重置时间和 Tibo 重置预告。GPT 与 Claude 分别提供独立的 glance，点开后使用同一份完整额度列表。
 
-主页按 GPT、Claude、AGY、Devin、OpenCode、ZCode、WorkBuddy 排列，支持滑动和分账号详情。主数值 28px，概览数值 46px，包含界面实际使用的简体中文字形。Claude 显示美元余额；AGY 合并两个 Gemini 账号，最多 200%；ZCode 主页显示 GLM-5.3，详情页同时显示 GLM-5.3 与 GLM-5.3-Flash；WorkBuddy 显示剩余 credits/上限。只有来源返回的周期和重置时间会显示。
+主页按 GPT、Claude、AGY、Devin、OpenCode、ZCode、WorkBuddy 排列，支持滑动和分账号详情。主数值 28px，概览数值 46px，包含界面实际使用的简体中文字形。Claude 显示美元余额；AGY 合并两个 Gemini 账号，最多 200%；ZCode 主页显示 GLM-5.3，详情页同时显示 GLM-5.3 与 GLM-5.3-Flash；ZCode 与 WorkBuddy 按国内、国外显示，国内在前；WorkBuddy 显示剩余 credits/上限。只有来源返回的周期和重置时间会显示。
 
 ## 数据流
 
@@ -40,7 +40,7 @@ npm run verify
 
 把 `QUOTA_ENDPOINT` 换成自己的服务根地址。可参考 `.env.example` 设置环境变量；这些命令使用进程环境，不会自动读取 `.env`。本地开发使用 `npm run dev`，凭据由 `setup.mjs` 写入 `.dev.vars`。
 
-`sources.json` 中的 provider 必须与自己的 Magpie 配置对应。可增删条目或设置 `enabled: false`。多个账号可指定不含个人信息的 `account` 标签；Antigravity 条目的 `command` 填写自己 CLI 的绝对路径或 PATH 中的命令。示例命令名需自行替换。支持的分组键见 `watch/source/QuotaData.mc`。
+`sources.json` 中的 provider 必须与自己的 Magpie 配置对应。可增删条目或设置 `enabled: false`。WorkBuddy 国内、国外来源分别填写 `region: "国内"`、`region: "国外"`；ZCode 根据 Magpie 的登录站点和 API 域名写入地区，不根据套餐名判断。其他多个账号可指定不含个人信息的 `account` 标签；Antigravity 条目的 `command` 填写自己 CLI 的绝对路径或 PATH 中的命令。示例命令名需自行替换。支持的分组键见 `watch/source/QuotaData.mc`。Magpie 配置默认读取 `~/.config/magpie`，可用 `MAGPIE_CONFIG_DIR` 指向其他位置。
 
 本地状态默认保存在 `~/.config/quota-watch/`。`QUOTA_CONFIG_DIR` 可改变整个目录，`QUOTA_SOURCES` 可指向独立的渠道配置文件。账号标签、Tibo 缓存、读写凭据和开发者签名私钥均属于本地配置。
 
@@ -78,6 +78,7 @@ Worker 的 `/design` 使用 `design/quota-v5.html`。在自己的模拟器中运
 simulator.png
 simulator-detail.png
 simulator-zcode.png
+simulator-regions.png
 simulator-gpt-announced.png
 simulator-gpt.png
 simulator-claude.png

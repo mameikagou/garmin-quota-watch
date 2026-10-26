@@ -7,6 +7,7 @@
     { "provider": "example-devin", "name": "Devin", "group": "devin", "kind": "magpie", "enabled": false },
     { "provider": "example-opencode", "name": "OpenCode", "group": "opencode", "kind": "magpie", "enabled": false },
     { "provider": "example-zcode", "name": "ZCode", "group": "zcode", "kind": "magpie", "enabled": false },
-    { "provider": "example-workbuddy", "name": "WorkBuddy", "group": "workbuddy", "kind": "magpie", "enabled": false }
+    { "provider": "example-workbuddy", "name": "WorkBuddy", "group": "workbuddy", "region": "国内", "kind": "magpie", "enabled": false },
+    { "provider": "example-workbuddy-ai", "name": "WorkBuddy", "group": "workbuddy", "region": "国外", "kind": "magpie", "enabled": false }
   ]
 }
