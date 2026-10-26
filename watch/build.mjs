@@ -42,14 +42,14 @@ const sourceFiles = (await readdir(join(directory, "source"))).filter((filename)
 const sourceText = (await Promise.all(sourceFiles.map((filename) => readFile(join(directory, "source", filename), "utf8")))).join("\n");
 const chinese = [...new Set(sourceText.match(/\p{Script=Han}/gu))].join("");
 const ascii = Array.from({ length: 95 }, (_, index) => String.fromCodePoint(index + 32)).join("");
-const channelNames = "GPTCCAGYDEVINOPENCODEZCODEWORKBUDDY";
+const channelNames = "GPTClaudeAGYDEVINOPENCODEZCODEWORKBUDDY";
 const fonts = [
   { name: "small", size: 16, weight: "Regular", characters: ascii + chinese + "·…" },
   { name: "label", size: 18, weight: "Regular", characters: ascii + chinese + "·‹›…" },
   { name: "numbers", size: 28, weight: "Regular", characters: "0123456789%." },
   { name: "title", size: 24, weight: "Bold", characters: channelNames },
-  { name: "glance-label", size: 20, weight: "Bold", characters: "GPTCC 周剩余额度0123456789$." },
-  { name: "glance-small", size: 16, weight: "Regular", characters: "TiboAIHOT0123456789: ·…hdm更新公告预计重置卡后上次确认天前今天时间待定发放中演示窗口内" },
+  { name: "glance-label", size: 20, weight: "Bold", characters: "GPTClaude 余额0123456789$." },
+  { name: "glance-small", size: 16, weight: "Regular", characters: "Tibo0123456789: .·…hdm更新后今天明天重置前已" },
   { name: "glance-number", size: 46, weight: "Regular", characters: "0123456789%." },
 ];
 for (const font of fonts) {
@@ -68,8 +68,10 @@ for (const font of fonts) {
 }
 const variants = [
   { name: "GPT", key: "codex", id: "b9a68e252d4a461d9f2ce6cb6ef8cd10", icon: "gpt.png" },
-  { name: "CC", key: "claude", id: "a1c6278aab4d47b29cd4f162c2b4f113", icon: "cc.png" },
+  { name: "Claude", key: "claude", id: "a1c6278aab4d47b29cd4f162c2b4f113", icon: "cc.png" },
 ];
+const previewArgument = process.argv.find((argument) => argument.startsWith("--preview-case="));
+const previewCase = previewArgument?.split("=", 2)[1] ?? "deadline";
 if (process.argv.includes("--preview-announcement")) {
   variants.splice(0, 2, { ...variants[0], name: "GPT-preview", id: "d62dbd423fbd46769aa3ac7f615d2e29", preview: true });
 }
@@ -86,7 +88,8 @@ for (const variant of variants) {
     strings: { string: { "@_id": "AppName", "#text": variant.name } },
     bitmaps: { bitmap: { "@_id": "LauncherIcon", "@_filename": "icon.png", "@_scaleX": "56", "@_scaleY": "56" } },
   } }));
-  await writeFile(join(target, "source/Variant.mc"), `(:glance) module QuotaVariant { const KEY = "${variant.key}"; const TITLE = "${variant.key === "codex" ? "GPT" : "CC"}"; }\n`);
+  const previewConstant = variant.preview ? ` const PREVIEW_CASE = "${previewCase}";` : "";
+  await writeFile(join(target, "source/Variant.mc"), `(:glance) module QuotaVariant { const KEY = "${variant.key}"; const TITLE = "${variant.key === "codex" ? "GPT" : "Claude"}";${previewConstant} }\n`);
   if (variant.preview) await copyFile(join(directory, "preview/Announcement.mc"), join(target, "source/Announcement.mc"));
   const jungle = [
     `project.manifest = ${join(target, "manifest.xml")}`,

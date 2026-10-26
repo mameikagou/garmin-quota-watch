@@ -85,10 +85,10 @@ assert(secondCache.next_request_at >= Date.parse(secondCache.attempted_at) + 600
 assert.equal(typeof secondCache.etag, "string");
 if (process.argv.includes("--artifacts")) {
   const parser = new XMLParser({ ignoreAttributes: false });
-  const manifests = await Promise.all(["GPT", "CC"].map(async (name) => parser.parse(
+  const manifests = await Promise.all(["GPT", "Claude"].map(async (name) => parser.parse(
     await readFile(new URL(`./watch/private/${name}/manifest.xml`, import.meta.url), "utf8"))));
   assert.notEqual(manifests[0]["iq:manifest"]["iq:application"]["@_id"], manifests[1]["iq:manifest"]["iq:application"]["@_id"]);
-  for (const filename of ["GPT.prg", "CC.prg", "simulator.png", "simulator-detail.png", "simulator-gpt.png", "simulator-gpt-announced.png", "simulator-cc.png"]) {
+  for (const filename of ["GPT.prg", "Claude.prg", "simulator.png", "simulator-detail.png", "simulator-gpt.png", "simulator-gpt-announced.png", "simulator-claude.png"]) {
     const download = await request(`/${filename}`);
     assert.equal(download.status, 200);
     if (filename.endsWith(".prg")) assert(download.headers.get("content-disposition").includes(filename));

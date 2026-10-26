@@ -92,7 +92,7 @@ class QuotaView extends QuotaCanvas {
             var group = groups[index] as Dictionary;
             var rows = group["rows"] as Array<Dictionary>;
             var height = 42 + rows.size() * 44;
-            if ("codex".equals(group["key"]) && QuotaData.tiboNotice(getQuotaApp().snapshot) != null) { height += 56; }
+            if ("codex".equals(group["key"]) && QuotaData.tiboNotice(getQuotaApp().snapshot) != null) { height += 34; }
             if (top + height > 50 && top < 390) { drawCard(dc, group, top, height, index); }
             top += height + 10;
         }
@@ -125,8 +125,7 @@ class QuotaView extends QuotaCanvas {
         if (notice == null) { return; }
         dc.setColor(0x293440, Graphics.COLOR_TRANSPARENT);
         dc.drawLine(bounds[0], bounds[1], bounds[0] + bounds[2], bounds[1]);
-        text(dc, bounds[0], bounds[1] + 4, notice["source"], small, 0x82929e);
-        text(dc, bounds[0], bounds[1] + 28, cropped(dc, notice["text"], bounds[2], small), small, notice["color"]);
+        text(dc, bounds[0], bounds[1] + 6, notice["text"], small, notice["color"]);
     }
     function drawRow(dc, bounds as Array, row as Dictionary, accent) {
         var left = bounds[0];
@@ -189,43 +188,27 @@ class QuotaDetail extends QuotaCanvas {
         var accounts = group["accounts"] as Array<Dictionary>;
         top += 102;
         for (var index = 0; index < accounts.size(); index++) {
-            top = drawAccount(dc, group, accounts[index], top);
+            top = drawAccount(dc, group, accounts[index], top, accounts.size() > 1);
         }
-        centered(dc, top - 4, "返回总览列表", label, 0x9aaab8);
-        contentHeight = top + offset + 75;
+        contentHeight = top + offset + 16;
     }
-    function drawAccount(dc, group as Dictionary, account as Dictionary, top) {
-        var width = 300;
-        var left = 45;
-        var name = "主账号";
-        if (account["account"] != null && account["account"].length() > 0) { name = "账号 " + account["account"]; }
-        text(dc, left + 10, top, name, label, 0x8fa0af);
-        top += 32;
-        if (account["plan"] != null) {
-            text(dc, left + 10, top, cropped(dc, account["plan"], 280, small), small, 0x82929e);
-            top += 28;
-        }
-        if (account["until_seconds"] != null) {
-            text(dc, left + 10, top, "至 " + QuotaData.date(account["until_seconds"]), small, 0x82929e);
-            top += 28;
+    function drawAccount(dc, group as Dictionary, account as Dictionary, top, showName) {
+        if (showName && account["account"] != null && account["account"].length() > 0) {
+            centered(dc, top, account["account"], label, 0x8fa0af);
+            top += 32;
         }
         var available = QuotaData.windows(group["key"], account);
         for (var index = 0; index < available.size(); index++) {
-            top = drawWindow(dc, [left, top, width], available[index], group);
+            top = drawWindow(dc, top, available[index], group);
         }
         return top + 12;
     }
-    function drawWindow(dc, bounds as Array, window as Dictionary, group as Dictionary) {
-        var left = bounds[0];
-        var top = bounds[1];
-        var width = bounds[2];
+    function drawWindow(dc, top, window as Dictionary, group as Dictionary) {
         var reset = QuotaData.date(window["resets_at_seconds"]);
-        var usage = window["display"];
         var height = 96;
-        if (reset.length() > 0) { height += 52; }
-        if (usage != null) { height += 52; }
-        width = safeWidth(top, height);
-        left = (390 - width) / 2;
+        if (reset.length() > 0) { height += 32; }
+        var width = safeWidth(top, height);
+        var left = (390 - width) / 2;
         if (top + height > 0 && top < 390) {
             box(dc, left, top, width, height);
             var name = QuotaData.period(window["name"]);
@@ -239,27 +222,16 @@ class QuotaDetail extends QuotaCanvas {
             text(dc, left + 14, top + 8, name, label, 0xd0dce5);
             text(dc, left + width - 14 - dc.getTextWidthInPixels(value, number), top + 34, value, number, color);
             track(dc, [left + 14, top + 84, width - 28, 5], row, group["color"]);
-            if (reset.length() > 0) { reset += " (" + QuotaData.countdown(window["resets_at_seconds"]) + "后)"; }
-            drawInfo(dc, [left + 14, top + 96, width - 28], reset, usage, color);
+            if (reset.length() > 0) {
+                reset += " · " + QuotaData.countdown(window["resets_at_seconds"]);
+                centered(dc, top + 96, reset, small, color);
+            }
         }
         return top + height + 8;
     }
-    function drawInfo(dc, bounds as Array, reset, usage, color) {
-        var top = bounds[1];
-        if (reset.length() > 0) {
-            text(dc, bounds[0], top, "重置时间", small, 0x82929e);
-            text(dc, bounds[0], top + 24, reset, small, color);
-            top += 52;
-        }
-        if (usage != null) {
-            var line = cropped(dc, usage, bounds[2], small);
-            text(dc, bounds[0], top, "额度用量", small, 0x82929e);
-            text(dc, bounds[0], top + 24, line, small, 0xd2dee8);
-        }
-    }
     function tap(position as Array) {
         var top = position[1] + offset;
-        if (top < 70 || top > contentHeight - 85) { back(); }
+        if (top >= 24 && top < 70) { back(); }
     }
     function back() { WatchUi.popView(WatchUi.SLIDE_RIGHT); return true; }
 }
@@ -285,7 +257,6 @@ class QuotaGlance extends WatchUi.GlanceView {
         draw(dc, width - dc.getTextWidthInPixels(time, _small) - 5, 4, time, _small, 0x82929e);
         var row = QuotaData.glanceValue(getQuotaApp().groups, QuotaVariant.KEY, "周");
         if (row == null) { return; }
-        draw(dc, 5, 31, "周剩余", _label, 0xc0cedb);
         draw(dc, 5, 59, QuotaData.countdown(row["stamp"]) + " 后", _small, 0x82929e);
         var value = QuotaData.value(row);
         draw(dc, width - dc.getTextWidthInPixels(value, _number) - 5, 19, value, _number,
@@ -300,8 +271,7 @@ class QuotaGlance extends WatchUi.GlanceView {
         if ("codex".equals(QuotaVariant.KEY)) {
             var notice = QuotaData.tiboNotice(getQuotaApp().snapshot);
             if (notice != null) {
-                draw(dc, 5, height - 49, notice["source"], _small, 0x82929e);
-                draw(dc, 5, height - 26, notice["text"], _small, notice["color"]);
+                draw(dc, 5, height - 28, notice["text"], _small, notice["color"]);
             }
         } else {
             var balance = QuotaData.glanceValue(getQuotaApp().groups, QuotaVariant.KEY, "余额");

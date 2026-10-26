@@ -1,14 +1,14 @@
 # Garmin Quota Watch
 
-在 Garmin vívoactive 5 上查看 AI 订阅额度、各周期重置时间和 Tibo 重置公告。GPT 与 CC 分别提供独立的 glance，点开后使用同一份完整额度列表。
+在 Garmin vívoactive 5 上查看 AI 订阅额度、各周期重置时间和 Tibo 重置预告。GPT 与 Claude 分别提供独立的 glance，点开后使用同一份完整额度列表。
 
-主页按 GPT、CC、AGY、Devin、OpenCode、ZCode、WorkBuddy 排列，支持滑动和分账号详情。主数值 28px，概览数值 46px，包含界面实际使用的简体中文字形。CC 显示美元余额；AGY 合并两个 Gemini 账号，最多 200%；ZCode 显示 GLM-5.3；WorkBuddy 显示剩余 credits/上限。只有来源返回的周期和重置时间会显示。
+主页按 GPT、Claude、AGY、Devin、OpenCode、ZCode、WorkBuddy 排列，支持滑动和分账号详情。主数值 28px，概览数值 46px，包含界面实际使用的简体中文字形。Claude 显示美元余额；AGY 合并两个 Gemini 账号，最多 200%；ZCode 显示 GLM-5.3；WorkBuddy 显示剩余 credits/上限。只有来源返回的周期和重置时间会显示。
 
 ## 数据流
 
 本机的 `upload.mjs` 每五分钟从 Magpie 和独立的 Antigravity CLI 读取额度，将摘要上传到 Cloudflare Worker + KV。手表通过手机联网读取 Worker；账号身份只在本地映射成标签。
 
-Tibo 公告来自 [AIHOT 的公开 API](https://aihot.news/openapi-v1.json)，匿名访问，每十分钟最多请求一次，支持 ETag、压缩和失败保留。公告预期时间和账号额度独立显示。没有预告时展示最近的重置或确认时间；只有确认帖时间时会明确写“上次确认”。使用该接口须遵守来源的个人非商业使用条件。
+Tibo 公告来自 [AIHOT 的公开 API](https://aihot.news/openapi-v1.json)，匿名访问，每十分钟最多请求一次，支持 ETag、压缩和失败保留。有效预告显示为一行醒目的“Tibo 2h 后”倒计时，没有预告时留空。使用该接口须遵守来源的个人非商业使用条件。
 
 ## 本机与 Worker
 
@@ -62,7 +62,7 @@ export QUOTA_ENDPOINT=https://quota.example.com
 npm run build:watch
 ```
 
-构建后得到 `watch/bin/GPT.prg` 和 `watch/bin/CC.prg`，两者使用不同 app id、同一份界面代码；由使用者自行安装到手表。首次构建会在本地配置目录生成签名私钥。`--package` 生成 IQ 包。`node watch/build.mjs --preview-announcement` 生成独立的预告演示应用，只在本地将 Tibo 公告替换成两小时倒计时，额度仍读取真实接口；演示不会上传。
+构建后得到 `watch/bin/GPT.prg` 和 `watch/bin/Claude.prg`，两者使用不同 app id、同一份界面代码；由使用者自行安装到手表。首次构建会在本地配置目录生成签名私钥。`--package` 生成 IQ 包。`node watch/build.mjs --preview-announcement` 生成独立的预告截图应用，只在本地将 Tibo 公告替换成两小时倒计时，额度仍读取真实接口，也不会上传。
 
 **PRG 和 IQ 包会嵌入自己的读取凭据，只用于个人安装。** `watch/private/`、`watch/bin/`、本地配置目录和自行添加的图标均不纳入 Git。
 
@@ -75,7 +75,7 @@ simulator.png
 simulator-detail.png
 simulator-gpt-announced.png
 simulator-gpt.png
-simulator-cc.png
+simulator-claude.png
 ```
 
 可把自行生成的截图放入忽略的 `public/` 目录，随自己的 Worker 部署。个人 PRG 如需同页下载，也可自行放入此目录；该目录内的文件会公开可读，因此只应发布自己明确准备公开的内容。`npm run verify -- --artifacts` 可检查自己的下载文件与本地构建是否一致。

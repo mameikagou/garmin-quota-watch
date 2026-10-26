@@ -5,7 +5,7 @@ import Toybox.Time.Gregorian;
 (:glance)
 module QuotaData {
     const KEYS = ["codex", "claude", "gemini", "devin", "opencode", "zcode", "workbuddy"];
-    const LABELS = ["GPT", "CC", "AGY", "DEVIN", "OPENCODE", "ZCODE", "WORKBUDDY"];
+    const LABELS = ["GPT", "Claude", "AGY", "DEVIN", "OPENCODE", "ZCODE", "WORKBUDDY"];
     const COLORS = [0x73ebc0, 0xd97757, 0x4c8cf5, 0xb7a1f8, 0xf6be85, 0xfacc15, 0x22d3ee];
 
     function build(snapshot) as Array<Dictionary> {
@@ -161,30 +161,64 @@ module QuotaData {
         return info.hour.format("%02d") + ":" + info.min.format("%02d") + " 更新";
     }
 
+    function beijingDay(stamp) as Number {
+        return ((stamp.toNumber() + 28800) / 86400).toNumber();
+    }
+
+    function beijingInfo(stamp) {
+        return Gregorian.utcInfo(new Time.Moment(stamp.toNumber() + 28800), Time.FORMAT_SHORT);
+    }
+
+    function tiboDayLabel(stamp, today) as String {
+        var day = beijingDay(stamp);
+        if (day == today) { return "今天"; }
+        if (day == today + 1) { return "明天"; }
+        var info = beijingInfo(stamp);
+        return info.month.format("%02d") + "." + info.day.format("%02d");
+    }
+
+    function tiboMessage(textValue as String) as Dictionary {
+        return {"text" => textValue, "color" => 0xffc66d};
+    }
+
+    function tiboDeadline(next as Dictionary) as Boolean {
+        if (next["deadline"] == true) { return true; }
+        var precision = next["precision"];
+        return precision != null && (precision.equals("deadline") || precision.equals("window")
+            || precision.equals("estimate"));
+    }
+
     function tiboNotice(snapshot) as Dictionary? {
         if (!(snapshot instanceof Dictionary) || !(snapshot["tibo"] instanceof Dictionary)) { return null; }
         var data = snapshot["tibo"] as Dictionary;
-        var source = data["demo"] == true ? "Tibo 公告 · 演示" : "Tibo 公告 · AIHOT";
         var next = data["next_reset"];
+        var now = Time.now().value();
+        var today = beijingDay(now);
         if (next instanceof Dictionary) {
-            var message = "预计时间待定";
-            if (next["expected_at_seconds"] != null) {
-                message = "预计 " + countdown(next["expected_at_seconds"]) + " 后重置";
-                if (next["expected_at_seconds"] <= Time.now().value()) { message = "重置时间待确认"; }
-                if (next["expected_at_seconds"] <= Time.now().value() && next["through_seconds"] != null
-                    && next["through_seconds"] > Time.now().value()) { message = "预计重置窗口内"; }
+            var expected = next["expected_at_seconds"];
+            var dateStamp = next["date_seconds"];
+            if (dateStamp == null) { dateStamp = expected; }
+            if (dateStamp != null && beijingDay(dateStamp) >= today) {
+                var status = next["status"];
+                var confirmed = next["confirmed"] == true || (status != null && status.equals("confirmed"));
+                if (beijingDay(dateStamp) == today && (confirmed || (expected != null && expected <= now))) {
+                    return tiboMessage("Tibo 已重置");
+                }
+                var dayLabel = tiboDayLabel(dateStamp, today);
+                if (expected == null) { return tiboMessage("Tibo " + dayLabel + "重置"); }
+                var info = beijingInfo(expected);
+                var textValue = "Tibo " + dayLabel + " " + info.hour.format("%02d") + ":"
+                    + info.min.format("%02d");
+                if (tiboDeadline(next)) { textValue += " 前"; }
+                return tiboMessage(textValue);
             }
-            if ("in_progress".equals(next["status"])) { message = "重置发放中"; }
-            if ("reset_credit".equals(next["kind"])) { message = "重置卡 " + message; }
-            return {"source" => source, "text" => message, "color" => 0xffc66d};
         }
         var last = data["last_reset"];
-        if (!(last instanceof Dictionary) || last["at_seconds"] == null) { return null; }
-        var days = ((Time.now().value() - last["at_seconds"]) / 86400.0).toNumber();
-        if (days < 0) { days = 0; }
-        var age = days == 0 ? "今天" : days.toString() + "天前";
-        var label = "confirmation_post".equals(last["basis"]) ? "上次确认 " : "上次重置 ";
-        return {"source" => source, "text" => label + age, "color" => 0x82929e};
+        if (last instanceof Dictionary && last["at_seconds"] != null
+                && beijingDay(last["at_seconds"]) == today) {
+            return tiboMessage("Tibo 已重置");
+        }
+        return null;
     }
 
     function glanceValue(groups as Array<Dictionary>, key as String, period as String) as Dictionary? {
