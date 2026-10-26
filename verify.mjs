@@ -94,14 +94,14 @@ if (process.argv.includes("--artifacts")) {
   const manifests = await Promise.all(["GPT", "Claude"].map(async (name) => parser.parse(
     await readFile(new URL(`./watch/private/${name}/manifest.xml`, import.meta.url), "utf8"))));
   assert.notEqual(manifests[0]["iq:manifest"]["iq:application"]["@_id"], manifests[1]["iq:manifest"]["iq:application"]["@_id"]);
-  for (const filename of ["GPT.prg", "Claude.prg", "simulator.png", "simulator-detail.png", "simulator-gpt.png", "simulator-gpt-announced.png", "simulator-claude.png"]) {
+  for (const filename of ["GPT.prg", "Claude.prg", "simulator.png", "simulator-detail.png", "simulator-zcode.png", "simulator-gpt.png", "simulator-gpt-announced.png", "simulator-claude.png"]) {
     const download = await request(`/${filename}`);
     assert.equal(download.status, 200);
     if (filename.endsWith(".prg")) assert(download.headers.get("content-disposition").includes(filename));
     const local = await readFile(new URL(`./watch/bin/${filename}`, import.meta.url));
     assert(Buffer.from(await download.arrayBuffer()).equals(local));
   }
-  console.log("两个独立应用和五张模拟器截图：直接下载及内容检查通过");
+  console.log("两个独立应用和六张模拟器截图：直接下载及内容检查通过");
 }
 console.log("真实 KV 读写通过；未授权访问、读写权限隔离、错误请求检查通过");
 console.log("Tibo 真实采集、十分钟请求间隔和并发缓存复用通过；生产快照使用真实公告");

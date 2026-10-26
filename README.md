@@ -2,7 +2,7 @@
 
 在 Garmin vívoactive 5 上查看 AI 订阅额度、各周期重置时间和 Tibo 重置预告。GPT 与 Claude 分别提供独立的 glance，点开后使用同一份完整额度列表。
 
-主页按 GPT、Claude、AGY、Devin、OpenCode、ZCode、WorkBuddy 排列，支持滑动和分账号详情。主数值 28px，概览数值 46px，包含界面实际使用的简体中文字形。Claude 显示美元余额；AGY 合并两个 Gemini 账号，最多 200%；ZCode 显示 GLM-5.3；WorkBuddy 显示剩余 credits/上限。只有来源返回的周期和重置时间会显示。
+主页按 GPT、Claude、AGY、Devin、OpenCode、ZCode、WorkBuddy 排列，支持滑动和分账号详情。主数值 28px，概览数值 46px，包含界面实际使用的简体中文字形。Claude 显示美元余额；AGY 合并两个 Gemini 账号，最多 200%；ZCode 主页显示 GLM-5.3，详情页同时显示 GLM-5.3 与 GLM-5.3-Flash；WorkBuddy 显示剩余 credits/上限。只有来源返回的周期和重置时间会显示。
 
 ## 数据流
 
@@ -77,6 +77,7 @@ Worker 的 `/design` 使用 `design/quota-v5.html`。在自己的模拟器中运
 ```text
 simulator.png
 simulator-detail.png
+simulator-zcode.png
 simulator-gpt-announced.png
 simulator-gpt.png
 simulator-claude.png

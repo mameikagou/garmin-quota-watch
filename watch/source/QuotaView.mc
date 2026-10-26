@@ -203,17 +203,19 @@ class QuotaDetail extends QuotaCanvas {
         contentHeight = top + offset + 16;
     }
     function drawAccount(dc, group as Dictionary, account as Dictionary, top, showName) {
-        if (showName && account["account"] != null && account["account"].length() > 0) {
+        if (showName && !"zcode".equals(group["key"])
+                && account["account"] != null && account["account"].length() > 0) {
             centered(dc, top, account["account"], label, 0x8fa0af);
             top += 32;
         }
-        var available = QuotaData.windows(group["key"], account);
+        var available = QuotaData.windows(group["key"], account, true);
         for (var index = 0; index < available.size(); index++) {
-            top = drawWindow(dc, top, available[index], group);
+            top = drawWindow(dc, top, available[index], group, account, available);
         }
         return top + 12;
     }
-    function drawWindow(dc, top, window as Dictionary, group as Dictionary) {
+    function drawWindow(dc, top, window as Dictionary, group as Dictionary,
+            account as Dictionary, available as Array<Dictionary>) {
         var reset = QuotaData.date(window["resets_at_seconds"]);
         var height = 96;
         if (reset.length() > 0) { height += 32; }
@@ -223,8 +225,7 @@ class QuotaDetail extends QuotaCanvas {
             box(dc, left, top, width, height);
             var name = QuotaData.period(window["name"]);
             if ("zcode".equals(group["key"])) {
-                name = "GLM-5.3 · 起步";
-                if ((window["name"] as String).find("1024") != null) { name = "GLM-5.3 · 活动"; }
+                name = QuotaData.zcodeLabel(account, window, available);
             }
             var row = QuotaData.makeRow(name, window);
             var value = QuotaData.value(row);
