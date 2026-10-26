@@ -48,7 +48,9 @@ npm run verify
 
 ## 编译两个手表应用
 
-需要 Garmin Connect IQ SDK、vívoactive 5 设备包、Java、`uv`、`fonttools`、`fontbm` 和 Noto Sans CJK 字体。Debian/Ubuntu 可安装 `fonts-noto-cjk`；构建脚本使用系统的 Regular/Bold TTC 简体中文 face，自动提取界面中文字形。
+需要 Garmin Connect IQ SDK、vívoactive 5 设备包、Java、`uv`、`fonttools`、`brotli`、`fontbm` 和 Noto Sans CJK 字体。Debian/Ubuntu 可安装 `fonts-noto-cjk`。构建脚本只提取界面实际使用的字符，中文字形来自 Noto Sans CJK。
+
+如果本机 Cedar 项目的 `frontend/src/assets/fonts/` 中存在 `Sans-Roman.woff2`，构建脚本会先用 `fontTools varLib.instancer` 生成 300、500 两个静态字重：大号百分比使用 300，标题、标签和倒计时使用 500。也可用 `CEDAR_FONT_DIR` 指向同样的字体目录。找不到本地 Sans 可变字体时，拉丁字母、数字和符号同样回退到 Noto。生成的字体子集、位图和资源清单都写入 Git 忽略的 `watch/private/`，不会进入公开仓库。
 
 将 Connect IQ SDK 路径设为 `CONNECTIQ_SDK`，将 fontbm 路径设为 `FONTBM`。默认路径分别是 `~/.local/share/garmin-connectiq/sdk` 和 `~/.local/bin/fontbm`。
 
@@ -88,4 +90,4 @@ simulator-claude.png
 
 ## 许可
 
-源码使用 [MIT](LICENSE)。`watch/resources/fonts/` 的位图字形由 Noto Sans CJK SC 转换并取子集，使用独立的 [SIL OFL 1.1](watch/resources/fonts/OFL.txt)，版权和来源见 [NOTICE](watch/resources/fonts/NOTICE.txt)。品牌名称及商标归各自权利人所有。
+源码使用 [MIT](LICENSE)。公开仓库中的 Noto Sans CJK SC 位图字形使用独立的 [SIL OFL 1.1](watch/resources/fonts/OFL.txt)，版权和来源见 [NOTICE](watch/resources/fonts/NOTICE.txt)。本机构建产生的字体资源保存在 `watch/private/`。品牌名称及商标归各自权利人所有。
