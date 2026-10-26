@@ -1,16 +1,11 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { configDirectory, quotaEndpoint } from "./config.mjs";
-import { sources } from "./sources.mjs";
-import { collectSources } from "./upload.mjs";
+import { collectGroup } from "./upload.mjs";
 
 const credentials = JSON.parse(await readFile(join(configDirectory, "credentials.json"), "utf8"));
 const endpoint = quotaEndpoint();
-const intervalMilliseconds = 10000;
-const statePath = join(configDirectory, "refresh-state.json");
-let handled = {};
-try { handled = JSON.parse(await readFile(statePath, "utf8")); }
-catch (error) { if (error.code !== "ENOENT") throw error; }
+const intervalMilliseconds = 15000;
 
 async function request(path, method = "GET", body) {
   const response = await fetch(`${endpoint}${path}`, {
@@ -27,22 +22,19 @@ async function request(path, method = "GET", body) {
 }
 
 async function refreshGroup(group) {
-  const selected = sources.filter((source) => source.group === group);
-  const collected = await collectSources(selected);
-  const cards = collected.filter((card) => !card.error);
-  const failedProviders = collected.filter((card) => card.error).map((card) => card.provider);
-  await request("/refresh/complete", "POST", { group, cards, failed_providers: failedProviders });
-  console.log(`${new Date().toISOString()} ${group}: 更新 ${cards.length} 张，失败 ${failedProviders.length} 个来源`);
+  const collection = await collectGroup(group);
+  const cards = collection.cards.filter((card) => !card.error);
+  const failedProviders = collection.cards.filter((card) => card.error).map((card) => card.provider);
+  await request("/refresh/complete", "POST", {
+    group, attempted_at: collection.attempted_at, cards, failed_providers: failedProviders,
+  });
+  const action = collection.cached ? "复用最近采集" : "真实采集";
+  console.log(`${new Date().toISOString()} ${group}: ${action}，更新 ${cards.length} 张，失败 ${failedProviders.length} 个来源`);
 }
 
 async function poll() {
   const pending = await request("/refresh/requests");
-  for (const refreshRequest of pending.requests ?? []) {
-    if (handled[refreshRequest.group] === refreshRequest.requested_at) { continue; }
-    await refreshGroup(refreshRequest.group);
-    handled[refreshRequest.group] = refreshRequest.requested_at;
-    await writeFile(statePath, JSON.stringify(handled, null, 2), { mode: 0o600 });
-  }
+  await Promise.all((pending.requests ?? []).map((refreshRequest) => refreshGroup(refreshRequest.group)));
 }
 
 async function main() {

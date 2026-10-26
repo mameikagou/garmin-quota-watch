@@ -32,9 +32,11 @@ assert.equal(response.status, 200);
 const snapshot = await response.json();
 assert(snapshot.cards.length > 0);
 assert(Number.isFinite(Date.parse(snapshot.collected_at)));
+assert(snapshot.collection_attempts && typeof snapshot.collection_attempts === "object");
 assert(snapshot.cards.some((card) => card.windows.length > 0 && !card.error));
 assert(snapshot.cards.every((card) => !Object.hasOwn(card, "user")));
 for (const source of sources) {
+  assert(Number.isFinite(Date.parse(snapshot.collection_attempts[source.group])), `${source.group} 应记录真实采集时间`);
   const cards = snapshot.cards.filter((card) => card.provider === source.provider);
   assert(cards.length > 0, `${source.provider} 应已上传`);
   assert(cards.every((card) => card.group === source.group && typeof card.account === "string"));

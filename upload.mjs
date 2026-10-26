@@ -1,13 +1,15 @@
 import { execFile } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { sources } from "./sources.mjs";
 import { collectTibo } from "./tibo.mjs";
 import { configDirectory, quotaEndpoint } from "./config.mjs";
+import { collectionCooldownMilliseconds } from "./refresh-policy.mjs";
 
 const execute = promisify(execFile);
+const collectionDirectory = join(configDirectory, "collections");
 
 function summary(card, source, account) {
   const windows = (card.windows ?? []).map((window) => {
@@ -102,23 +104,87 @@ async function collectAntigravity(account) {
 }
 
 export async function collectSources(selectedSources) {
-  const labelPath = join(configDirectory, "account-labels.json");
-  let labels = {};
-  try { labels = JSON.parse(await readFile(labelPath, "utf8")); }
+  const group = selectedSources[0]?.group;
+  if (!group || selectedSources.some((source) => source.group !== group)) {
+    throw new Error("一次采集只能包含一个额度组");
+  }
+  const labelDirectory = join(configDirectory, "account-labels");
+  const labelPath = join(labelDirectory, `${group}.json`);
+  let groupLabels = [];
+  try { groupLabels = JSON.parse(await readFile(labelPath, "utf8")); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
+  const labels = { [group]: groupLabels };
   const collected = await Promise.all(selectedSources.map((source) => collect(source, labels)));
   const cards = collected.flat();
-  await writeFile(labelPath, JSON.stringify(labels, null, 2), { mode: 0o600 });
+  await mkdir(labelDirectory, { recursive: true, mode: 0o700 });
+  await writeFile(labelPath, JSON.stringify(labels[group], null, 2), { mode: 0o600 });
   return cards;
 }
 
+function groupSources(group) {
+  return sources.filter((source) => source.group === group);
+}
+
+async function readCollection(group) {
+  try {
+    return JSON.parse(await readFile(join(collectionDirectory, `${group}.json`), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function writeCollection(group, collection) {
+  await mkdir(collectionDirectory, { recursive: true, mode: 0o700 });
+  const path = join(collectionDirectory, `${group}.json`);
+  const temporaryPath = `${path}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, JSON.stringify(collection, null, 2), { mode: 0o600 });
+  await rename(temporaryPath, path);
+}
+
+async function collectGroupUnlocked(group) {
+  const selectedSources = groupSources(group);
+  if (!selectedSources.length) throw new Error(`未知额度组 ${group}`);
+  const previous = await readCollection(group);
+  const previousAttempt = Date.parse(previous?.attempted_at);
+  if (Number.isFinite(previousAttempt) && Date.now() - previousAttempt < collectionCooldownMilliseconds) {
+    return { ...previous, cached: true };
+  }
+  const attemptedAt = new Date().toISOString();
+  const cards = await collectSources(selectedSources);
+  const collection = { group, attempted_at: attemptedAt, cards };
+  await writeCollection(group, collection);
+  return { ...collection, cached: false };
+}
+
+export async function collectGroup(group) {
+  await mkdir(collectionDirectory, { recursive: true, mode: 0o700 });
+  const { stdout } = await execute("flock", [
+    "--exclusive", join(collectionDirectory, `${group}.lock`),
+    process.execPath, fileURLToPath(import.meta.url), "--collect-group", group,
+  ], { timeout: 90000, maxBuffer: 2 * 1024 * 1024 });
+  return JSON.parse(stdout);
+}
+
+async function collectAllGroups() {
+  const groups = [...new Set(sources.map((source) => source.group))];
+  return Promise.all(groups.map((group) => collectGroup(group)));
+}
+
 async function main() {
-  const [cards, tibo] = await Promise.all([collectSources(sources), collectTibo()]);
+  const requestedGroup = process.argv[process.argv.indexOf("--collect-group") + 1];
+  if (process.argv.includes("--collect-group")) {
+    console.log(JSON.stringify(await collectGroupUnlocked(requestedGroup)));
+    return;
+  }
+  const [collections, tibo] = await Promise.all([collectAllGroups(), collectTibo()]);
+  const cards = collections.flatMap((collection) => collection.cards);
   if (cards.every((card) => card.error)) throw new Error("所有渠道查询失败，保留云端最近一次数据");
   const collectedAt = new Date();
   const snapshot = {
     collected_at: collectedAt.toISOString(),
     collected_at_seconds: Math.floor(collectedAt.getTime() / 1000),
+    collection_attempts: Object.fromEntries(collections.map((collection) => [collection.group, collection.attempted_at])),
     cards,
     ...(tibo ? { tibo } : {}),
   };
