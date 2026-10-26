@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { sources } from "./sources.mjs";
 import { collectTibo } from "./tibo.mjs";
@@ -100,16 +101,19 @@ async function collectAntigravity(account) {
   }
 }
 
-async function main() {
+export async function collectSources(selectedSources) {
   const labelPath = join(configDirectory, "account-labels.json");
   let labels = {};
   try { labels = JSON.parse(await readFile(labelPath, "utf8")); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
-  const [collected, tibo] = await Promise.all([
-    Promise.all(sources.map((source) => collect(source, labels))), collectTibo(),
-  ]);
+  const collected = await Promise.all(selectedSources.map((source) => collect(source, labels)));
   const cards = collected.flat();
   await writeFile(labelPath, JSON.stringify(labels, null, 2), { mode: 0o600 });
+  return cards;
+}
+
+async function main() {
+  const [cards, tibo] = await Promise.all([collectSources(sources), collectTibo()]);
   if (cards.every((card) => card.error)) throw new Error("所有渠道查询失败，保留云端最近一次数据");
   const collectedAt = new Date();
   const snapshot = {
@@ -134,7 +138,9 @@ async function main() {
   console.log(`已上传 ${cards.length} 个额度卡片，${cards.filter((card) => card.error).length} 个查询失败`);
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}

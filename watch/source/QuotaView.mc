@@ -166,6 +166,14 @@ class QuotaView extends QuotaCanvas {
 class QuotaDetail extends QuotaCanvas {
     var _group as Dictionary;
     function initialize(group) { QuotaCanvas.initialize(); _group = group; }
+    function onShow() {
+        QuotaCanvas.onShow();
+        getQuotaApp().refreshGroup(_group["key"] as String);
+    }
+    function onHide() {
+        getQuotaApp().cancelDetailRefresh(_group["key"] as String);
+        QuotaCanvas.onHide();
+    }
     function onUpdate(dc) {
         dc.setColor(0x000000, 0x000000);
         dc.clear();
@@ -185,8 +193,10 @@ class QuotaDetail extends QuotaCanvas {
         dc.setColor(group["color"], Graphics.COLOR_TRANSPARENT);
         dc.fillCircle(195 - headingWidth / 2 - 12, top + 72, 4);
         centered(dc, top + 50, group["title"], title, group["color"]);
+        centered(dc, top + 80, QuotaData.updatedTime(getQuotaApp().snapshot), small,
+            getQuotaApp().detailRefreshing ? 0xffc66d : 0x82929e);
         var accounts = group["accounts"] as Array<Dictionary>;
-        top += 102;
+        top += 122;
         for (var index = 0; index < accounts.size(); index++) {
             top = drawAccount(dc, group, accounts[index], top, accounts.size() > 1);
         }

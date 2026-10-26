@@ -156,9 +156,14 @@ module QuotaData {
     }
 
     function updated(snapshot) as String {
+        var time = updatedTime(snapshot);
+        return time.length() == 0 ? "" : time + " 更新";
+    }
+
+    function updatedTime(snapshot) as String {
         if (!(snapshot instanceof Dictionary) || snapshot["collected_at_seconds"] == null) { return ""; }
         var info = Gregorian.info(new Time.Moment(snapshot["collected_at_seconds"].toNumber()), Time.FORMAT_SHORT);
-        return info.hour.format("%02d") + ":" + info.min.format("%02d") + " 更新";
+        return info.hour.format("%02d") + ":" + info.min.format("%02d");
     }
 
     function beijingDay(stamp) as Number {

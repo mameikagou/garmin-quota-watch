@@ -6,7 +6,7 @@
 
 ## 数据流
 
-本机的 `upload.mjs` 每五分钟从 Magpie 和独立的 Antigravity CLI 读取额度，将摘要上传到 Cloudflare Worker + KV。手表通过手机联网读取 Worker；账号身份只在本地映射成标签。
+本机的 `upload.mjs` 每五分钟从 Magpie 和独立的 Antigravity CLI 读取额度，将摘要上传到 Cloudflare Worker + KV。`refresh.mjs` 每十秒检查一次按需刷新队列；进入详情页会先显示缓存，再请求这一组来源，采集完成后手表自动重读。每组两分钟内只触发一次真实采集。手表通过手机联网读取 Worker；账号身份只在本地映射成标签。
 
 Tibo 公告来自 [AIHOT 的公开 API](https://aihot.news/openapi-v1.json)，匿名访问，每十分钟最多请求一次，支持 ETag、压缩和失败保留。有效预告显示为一行醒目的“Tibo 2h 后”倒计时，没有预告时留空。使用该接口须遵守来源的个人非商业使用条件。
 
@@ -40,7 +40,7 @@ npm run verify
 
 本地状态默认保存在 `~/.config/quota-watch/`。`QUOTA_CONFIG_DIR` 可改变整个目录，`QUOTA_SOURCES` 可指向独立的渠道配置文件。账号标签、Tibo 缓存、读写凭据和开发者签名私钥均属于本地配置。
 
-需要定时上传时，修改 `quota-watch-upload.service` 的 `WorkingDirectory`，在 `~/.config/quota-watch/upload.env` 填入 `QUOTA_ENDPOINT` 和包含 Node/CLI 的 `PATH`，再将 service 和 timer 安装到自己的 systemd 用户目录并启用 timer。
+需要定时上传和按需刷新时，修改两个 service 的 `WorkingDirectory`，在 `~/.config/quota-watch/upload.env` 填入 `QUOTA_ENDPOINT` 和包含 Node/CLI 的 `PATH`，再将 service、timer 安装到自己的 systemd 用户目录，启用 `quota-watch-upload.timer` 与 `quota-watch-refresh.service`。
 
 ## 编译两个手表应用
 

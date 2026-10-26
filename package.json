@@ -9,6 +9,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "upload": "node upload.mjs",
+    "refresh": "node refresh.mjs",
     "build:watch": "node watch/build.mjs",
     "verify": "node verify.mjs"
   },
