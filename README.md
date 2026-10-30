@@ -8,6 +8,8 @@
 
 本机的 `upload.mjs` 每五分钟从 Magpie 和独立的 Antigravity CLI 读取额度，将摘要上传到 Cloudflare Worker + KV。`refresh.mjs` 每十五秒检查一次按需刷新队列；进入详情页会先显示缓存，再请求这一组来源，采集完成后手表自动重读。定时采集和按需采集共用本地采集记录与同一把分组锁：每组距离最近一次真实采集不足五分钟时直接使用本地结果，同时到达的请求等待正在执行的采集，失败也记入五分钟冷却且不自动重试。手表通过手机联网读取 Worker；账号身份只在本地映射成标签。
 
+Codex 额度从 Magpie 保存的 Codex 账号读取，与 Codex CLI 当前采用 ChatGPT 登录还是 API key 登录无关；本机存在多个 Codex 账号时会全部采集。账号信息不会写入来源配置或上传到公开仓库。
+
 五分钟冷却使同一家上游在任意连续一天最多被真实采集 288 次，包含定时和按需两种入口，按需刷新不会提高原有定时任务的最坏请求数。同组的多个账号各自最多也是 288 次。
 
 按十五秒轮询计算，本机刷新进程每天向 Worker 发 5,760 次请求。队列和按需结果由 SQLite Durable Object 保存，因此轮询产生 0 次 KV 读取、0 次 KV 写入、0 次 KV 列举；原有五分钟上传每天最多写 KV 288 次，只有 Tibo 缺失时才读取旧值，最多再读 KV 288 次。手表每次进入详情页另有一次触发请求和最多八次 KV 读取。达到七组每五分钟各采集一次的上限，并按每次采集对应一次详情请求、读满八次计算，Worker 与 Durable Object 请求、Durable Object 行读取均不超过 26,208 次，Durable Object 行写入不超过 4,320 次，KV 读取不超过 16,416 次，KV 写入固定为 288 次，KV 列举和删除均为 0 次，均低于免费额度。冷却期内重复进入详情页，每次只增加两次 Worker 与 Durable Object 请求、一次 KV 读取，不增加存储写入或上游采集。额度依据 [Workers KV](https://developers.cloudflare.com/kv/platform/pricing/) 与 [Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/) 的免费方案。

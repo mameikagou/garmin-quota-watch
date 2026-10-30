@@ -74,10 +74,10 @@ async function loadZcodeRegions() {
   return regions;
 }
 
-function failedCard(source, region) {
+function failedCard(source, region, account = region ?? source.account ?? "") {
   return {
     provider: source.provider, name: source.name, group: source.group,
-    account: region ?? source.account ?? "", ...(region ? { region } : {}),
+    account, ...(region ? { region } : {}),
     windows: [], error: "额度查询失败",
   };
 }
@@ -91,25 +91,59 @@ function accountLabel(source, card, labels) {
   return String.fromCharCode(65 + accounts.indexOf(identity));
 }
 
-async function collect(source, labels, zcodeRegions) {
-  try {
-    if (source.kind === "antigravity") return await collectAntigravity(source);
-    const { stdout } = await execute(process.env.MAGPIE_BIN ?? "magpie", ["quota", "refresh", source.provider, "--json"], {
-      timeout: 60000, maxBuffer: 1024 * 1024,
-    });
-    const cards = JSON.parse(stdout).filter((card) => card.provider === source.provider);
-    if (!cards.length) throw new Error("No quota card");
-    return cards.map((card) => {
-      const region = source.region ?? zcodeRegions.get(card.user);
-      if ((source.group === "zcode" || source.group === "workbuddy") && !region) {
-        return failedCard(source, null);
-      }
-      const account = region ?? accountLabel(source, card, labels);
-      return { ...summary(card, source, account, region), source: "magpie" };
-    });
-  } catch {
-    return [failedCard(source, source.region)];
+async function savedUsers(agent) {
+  const logins = JSON.parse(await readFile(join(magpieConfigDirectory, "logins.json"), "utf8"));
+  return [...new Set(logins
+    .filter((login) => login.agent === agent && typeof login.user === "string" && login.user.length > 0)
+    .map((login) => login.user))];
+}
+
+async function collectMagpie(source, labels, zcodeRegions) {
+  const { stdout } = await execute(process.env.MAGPIE_BIN ?? "magpie", [
+    "quota", "refresh", source.provider, "--json",
+  ], { timeout: 60000, maxBuffer: 1024 * 1024 });
+  const cards = JSON.parse(stdout).filter((card) => card.provider === source.provider);
+  if (!cards.length) throw new Error("No quota card");
+  return cards.map((card) => {
+    const region = source.region ?? zcodeRegions.get(card.user);
+    if ((source.group === "zcode" || source.group === "workbuddy") && !region) {
+      return failedCard(source, null);
+    }
+    const account = region ?? accountLabel(source, card, labels);
+    return { ...summary(card, source, account, region), source: "magpie" };
+  });
+}
+
+async function collectCodexAccounts(source, labels) {
+  const users = await savedUsers(source.provider);
+  if (!users.length) return [failedCard(source, null)];
+  const { stdout } = await execute(process.env.MAGPIE_BIN ?? "magpie", [
+    "accounts", source.provider, "--json",
+  ], { timeout: 60000, maxBuffer: 1024 * 1024 });
+  const cards = JSON.parse(stdout).filter((card) => card.agent === source.provider && users.includes(card.user));
+  const results = [];
+  for (const user of users) {
+    const accountCards = cards.filter((card) => card.user === user);
+    if (!accountCards.length) {
+      results.push(failedCard(source, null, accountLabel(source, { user }, labels)));
+      continue;
+    }
+    for (const card of accountCards) {
+      const account = accountLabel(source, card, labels);
+      results.push({ ...summary(card, source, account), source: "magpie" });
+    }
   }
+  return results;
+}
+
+async function collect(source, labels, zcodeRegions) {
+  if (source.kind === "antigravity") return collectAntigravity(source);
+  if (source.provider === "codex") {
+    try { return await collectCodexAccounts(source, labels); }
+    catch { return [failedCard(source, null)]; }
+  }
+  try { return await collectMagpie(source, labels, zcodeRegions); }
+  catch { return [failedCard(source, source.region)]; }
 }
 
 function antigravityWindows(groups) {
