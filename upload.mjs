@@ -1,14 +1,19 @@
 import { execFile } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { sources } from "./sources.mjs";
 import { collectTibo } from "./tibo.mjs";
 import { configDirectory, quotaEndpoint } from "./config.mjs";
+import { collectionCooldownMilliseconds } from "./refresh-policy.mjs";
 
 const execute = promisify(execFile);
+const collectionDirectory = join(configDirectory, "collections");
+const magpieConfigDirectory = process.env.MAGPIE_CONFIG_DIR ?? join(homedir(), ".config/magpie");
 
-function summary(card, source, account) {
+function summary(card, source, account, region) {
   const windows = (card.windows ?? []).map((window) => {
     const result = { name: window.name, used: window.used, remaining: window.remaining };
     for (const key of ["resetsAt", "amount", "limit", "unit", "pool", "display"]) {
@@ -23,6 +28,7 @@ function summary(card, source, account) {
     name: source.name,
     group: source.group,
     account,
+    ...(region ? { region } : {}),
     source_read_at: card.readAt ?? null,
     windows,
     ...(card.error ? { error: "额度查询失败" } : {}),
@@ -37,6 +43,45 @@ function summary(card, source, account) {
   return result;
 }
 
+function zcodeRegion(auth) {
+  if (!auth || typeof auth.refresh !== "string") return null;
+  let login;
+  try { login = JSON.parse(auth.refresh); }
+  catch { return null; }
+  const base = typeof login.base === "string" ? login.base : "";
+  if (login.site === "bigmodel" || base.startsWith("https://open.bigmodel.cn/")) return "local";
+  if (login.site === "zai" || base.startsWith("https://api.z.ai/")) return "global";
+  return null;
+}
+
+async function loadZcodeRegions() {
+  const regions = new Map();
+  try {
+    const [loginText, authText] = await Promise.all([
+      readFile(join(magpieConfigDirectory, "logins.json"), "utf8"),
+      readFile(join(magpieConfigDirectory, "plugin-auth.json"), "utf8"),
+    ]);
+    const logins = JSON.parse(loginText);
+    const auth = JSON.parse(authText);
+    for (const login of logins) {
+      if (login.agent !== "plugin:zcode" || typeof login.user !== "string") continue;
+      const region = zcodeRegion(auth[login.home]);
+      if (region) regions.set(login.user, region);
+    }
+  } catch {
+    return regions;
+  }
+  return regions;
+}
+
+function failedCard(source, region, account = region ?? source.account ?? "") {
+  return {
+    provider: source.provider, name: source.name, group: source.group,
+    account, ...(region ? { region } : {}),
+    windows: [], error: "额度查询失败",
+  };
+}
+
 function accountLabel(source, card, labels) {
   if (source.account) return source.account;
   if (!card.user) return card.account ?? "";
@@ -46,18 +91,59 @@ function accountLabel(source, card, labels) {
   return String.fromCharCode(65 + accounts.indexOf(identity));
 }
 
-async function collect(source, labels) {
-  try {
-    if (source.kind === "antigravity") return await collectAntigravity(source);
-    const { stdout } = await execute(process.env.MAGPIE_BIN ?? "magpie", ["quota", "refresh", source.provider, "--json"], {
-      timeout: 60000, maxBuffer: 1024 * 1024,
-    });
-    const cards = JSON.parse(stdout).filter((card) => card.provider === source.provider);
-    if (!cards.length) throw new Error("No quota card");
-    return cards.map((card) => ({ ...summary(card, source, accountLabel(source, card, labels)), source: "magpie" }));
-  } catch {
-    return [{ provider: source.provider, name: source.name, group: source.group, account: source.account ?? "", windows: [], error: "额度查询失败" }];
+async function savedUsers(agent) {
+  const logins = JSON.parse(await readFile(join(magpieConfigDirectory, "logins.json"), "utf8"));
+  return [...new Set(logins
+    .filter((login) => login.agent === agent && typeof login.user === "string" && login.user.length > 0)
+    .map((login) => login.user))];
+}
+
+async function collectMagpie(source, labels, zcodeRegions) {
+  const { stdout } = await execute(process.env.MAGPIE_BIN ?? "magpie", [
+    "quota", "refresh", source.provider, "--json",
+  ], { timeout: 60000, maxBuffer: 1024 * 1024 });
+  const cards = JSON.parse(stdout).filter((card) => card.provider === source.provider);
+  if (!cards.length) throw new Error("No quota card");
+  return cards.map((card) => {
+    const region = source.region ?? zcodeRegions.get(card.user);
+    if ((source.group === "zcode" || source.group === "workbuddy") && !region) {
+      return failedCard(source, null);
+    }
+    const account = region ?? accountLabel(source, card, labels);
+    return { ...summary(card, source, account, region), source: "magpie" };
+  });
+}
+
+async function collectCodexAccounts(source, labels) {
+  const users = await savedUsers(source.provider);
+  if (!users.length) return [failedCard(source, null)];
+  const { stdout } = await execute(process.env.MAGPIE_BIN ?? "magpie", [
+    "accounts", source.provider, "--json",
+  ], { timeout: 60000, maxBuffer: 1024 * 1024 });
+  const cards = JSON.parse(stdout).filter((card) => card.agent === source.provider && users.includes(card.user));
+  const results = [];
+  for (const user of users) {
+    const accountCards = cards.filter((card) => card.user === user);
+    if (!accountCards.length) {
+      results.push(failedCard(source, null, accountLabel(source, { user }, labels)));
+      continue;
+    }
+    for (const card of accountCards) {
+      const account = accountLabel(source, card, labels);
+      results.push({ ...summary(card, source, account), source: "magpie" });
+    }
   }
+  return results;
+}
+
+async function collect(source, labels, zcodeRegions) {
+  if (source.kind === "antigravity") return collectAntigravity(source);
+  if (source.provider === "codex") {
+    try { return await collectCodexAccounts(source, labels); }
+    catch { return [failedCard(source, null)]; }
+  }
+  try { return await collectMagpie(source, labels, zcodeRegions); }
+  catch { return [failedCard(source, source.region)]; }
 }
 
 function antigravityWindows(groups) {
@@ -100,21 +186,89 @@ async function collectAntigravity(account) {
   }
 }
 
-async function main() {
-  const labelPath = join(configDirectory, "account-labels.json");
-  let labels = {};
-  try { labels = JSON.parse(await readFile(labelPath, "utf8")); }
+export async function collectSources(selectedSources) {
+  const group = selectedSources[0]?.group;
+  if (!group || selectedSources.some((source) => source.group !== group)) {
+    throw new Error("一次采集只能包含一个额度组");
+  }
+  const labelDirectory = join(configDirectory, "account-labels");
+  const labelPath = join(labelDirectory, `${group}.json`);
+  let groupLabels = [];
+  try { groupLabels = JSON.parse(await readFile(labelPath, "utf8")); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
-  const [collected, tibo] = await Promise.all([
-    Promise.all(sources.map((source) => collect(source, labels))), collectTibo(),
-  ]);
+  const labels = { [group]: groupLabels };
+  const zcodeRegions = group === "zcode" ? await loadZcodeRegions() : new Map();
+  const collected = await Promise.all(selectedSources.map((source) => collect(source, labels, zcodeRegions)));
   const cards = collected.flat();
-  await writeFile(labelPath, JSON.stringify(labels, null, 2), { mode: 0o600 });
+  await mkdir(labelDirectory, { recursive: true, mode: 0o700 });
+  await writeFile(labelPath, JSON.stringify(labels[group], null, 2), { mode: 0o600 });
+  return cards;
+}
+
+function groupSources(group) {
+  return sources.filter((source) => source.group === group);
+}
+
+async function readCollection(group) {
+  try {
+    return JSON.parse(await readFile(join(collectionDirectory, `${group}.json`), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function writeCollection(group, collection) {
+  await mkdir(collectionDirectory, { recursive: true, mode: 0o700 });
+  const path = join(collectionDirectory, `${group}.json`);
+  const temporaryPath = `${path}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, JSON.stringify(collection, null, 2), { mode: 0o600 });
+  await rename(temporaryPath, path);
+}
+
+async function collectGroupUnlocked(group) {
+  const selectedSources = groupSources(group);
+  if (!selectedSources.length) throw new Error(`未知额度组 ${group}`);
+  const previous = await readCollection(group);
+  const previousAttempt = Date.parse(previous?.attempted_at);
+  if (Number.isFinite(previousAttempt) && Date.now() - previousAttempt < collectionCooldownMilliseconds) {
+    return { ...previous, cached: true };
+  }
+  const attemptedAt = new Date().toISOString();
+  const cards = await collectSources(selectedSources);
+  const collection = { group, attempted_at: attemptedAt, cards };
+  await writeCollection(group, collection);
+  return { ...collection, cached: false };
+}
+
+export async function collectGroup(group) {
+  await mkdir(collectionDirectory, { recursive: true, mode: 0o700 });
+  const { stdout } = await execute("flock", [
+    "--exclusive", join(collectionDirectory, `${group}.lock`),
+    process.execPath, fileURLToPath(import.meta.url), "--collect-group", group,
+  ], { timeout: 90000, maxBuffer: 2 * 1024 * 1024 });
+  return JSON.parse(stdout);
+}
+
+async function collectAllGroups() {
+  const groups = [...new Set(sources.map((source) => source.group))];
+  return Promise.all(groups.map((group) => collectGroup(group)));
+}
+
+async function main() {
+  const requestedGroup = process.argv[process.argv.indexOf("--collect-group") + 1];
+  if (process.argv.includes("--collect-group")) {
+    console.log(JSON.stringify(await collectGroupUnlocked(requestedGroup)));
+    return;
+  }
+  const [collections, tibo] = await Promise.all([collectAllGroups(), collectTibo()]);
+  const cards = collections.flatMap((collection) => collection.cards);
   if (cards.every((card) => card.error)) throw new Error("所有渠道查询失败，保留云端最近一次数据");
   const collectedAt = new Date();
   const snapshot = {
     collected_at: collectedAt.toISOString(),
     collected_at_seconds: Math.floor(collectedAt.getTime() / 1000),
+    collection_attempts: Object.fromEntries(collections.map((collection) => [collection.group, collection.attempted_at])),
     cards,
     ...(tibo ? { tibo } : {}),
   };
@@ -134,7 +288,9 @@ async function main() {
   console.log(`已上传 ${cards.length} 个额度卡片，${cards.filter((card) => card.error).length} 个查询失败`);
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}

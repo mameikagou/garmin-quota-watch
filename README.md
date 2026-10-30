@@ -2,11 +2,17 @@
 
 在 Garmin vívoactive 5 上查看 AI 订阅额度、各周期重置时间和 Tibo 重置预告。GPT 与 Claude 分别提供独立的 glance，点开后使用同一份完整额度列表。
 
-主页按 GPT、Claude、AGY、Devin、OpenCode、ZCode、WorkBuddy 排列，支持滑动和分账号详情。主数值 28px，概览数值 46px，包含界面实际使用的简体中文字形。Claude 显示美元余额；AGY 合并两个 Gemini 账号，最多 200%；ZCode 显示 GLM-5.3；WorkBuddy 显示剩余 credits/上限。只有来源返回的周期和重置时间会显示。
+主页按 GPT、Claude、AGY、Devin、OpenCode、ZCode、WorkBuddy 排列，支持滑动和分账号详情。主数值 28px，概览数值 46px，包含界面实际使用的简体中文字形。Claude 显示美元余额；AGY 合并两个 Gemini 账号，最多 200%；ZCode 主页显示 GLM-5.3，详情页同时显示 GLM-5.3 与 GLM-5.3-Flash；ZCode 与 WorkBuddy 按 Local、Global 显示，Local 在前；WorkBuddy 显示剩余 credits/上限。只有来源返回的周期和重置时间会显示。
 
 ## 数据流
 
-本机的 `upload.mjs` 每五分钟从 Magpie 和独立的 Antigravity CLI 读取额度，将摘要上传到 Cloudflare Worker + KV。手表通过手机联网读取 Worker；账号身份只在本地映射成标签。
+本机的 `upload.mjs` 每五分钟从 Magpie 和独立的 Antigravity CLI 读取额度，将摘要上传到 Cloudflare Worker + KV。`refresh.mjs` 每十五秒检查一次按需刷新队列；进入详情页会先显示缓存，再请求这一组来源，采集完成后手表自动重读。定时采集和按需采集共用本地采集记录与同一把分组锁：每组距离最近一次真实采集不足五分钟时直接使用本地结果，同时到达的请求等待正在执行的采集，失败也记入五分钟冷却且不自动重试。手表通过手机联网读取 Worker；账号身份只在本地映射成标签。
+
+Codex 额度从 Magpie 保存的 Codex 账号读取，与 Codex CLI 当前采用 ChatGPT 登录还是 API key 登录无关；本机存在多个 Codex 账号时会全部采集。账号信息不会写入来源配置或上传到公开仓库。
+
+五分钟冷却使同一家上游在任意连续一天最多被真实采集 288 次，包含定时和按需两种入口，按需刷新不会提高原有定时任务的最坏请求数。同组的多个账号各自最多也是 288 次。
+
+按十五秒轮询计算，本机刷新进程每天向 Worker 发 5,760 次请求。队列和按需结果由 SQLite Durable Object 保存，因此轮询产生 0 次 KV 读取、0 次 KV 写入、0 次 KV 列举；原有五分钟上传每天最多写 KV 288 次，只有 Tibo 缺失时才读取旧值，最多再读 KV 288 次。手表每次进入详情页另有一次触发请求和最多八次 KV 读取。达到七组每五分钟各采集一次的上限，并按每次采集对应一次详情请求、读满八次计算，Worker 与 Durable Object 请求、Durable Object 行读取均不超过 26,208 次，Durable Object 行写入不超过 4,320 次，KV 读取不超过 16,416 次，KV 写入固定为 288 次，KV 列举和删除均为 0 次，均低于免费额度。冷却期内重复进入详情页，每次只增加两次 Worker 与 Durable Object 请求、一次 KV 读取，不增加存储写入或上游采集。额度依据 [Workers KV](https://developers.cloudflare.com/kv/platform/pricing/) 与 [Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/) 的免费方案。
 
 Tibo 公告来自 [AIHOT 的公开 API](https://aihot.news/openapi-v1.json)，匿名访问，每十分钟最多请求一次，支持 ETag、压缩和失败保留。有效预告显示为一行醒目的“Tibo 2h 后”倒计时，没有预告时留空。使用该接口须遵守来源的个人非商业使用条件。
 
@@ -36,15 +42,17 @@ npm run verify
 
 把 `QUOTA_ENDPOINT` 换成自己的服务根地址。可参考 `.env.example` 设置环境变量；这些命令使用进程环境，不会自动读取 `.env`。本地开发使用 `npm run dev`，凭据由 `setup.mjs` 写入 `.dev.vars`。
 
-`sources.json` 中的 provider 必须与自己的 Magpie 配置对应。可增删条目或设置 `enabled: false`。多个账号可指定不含个人信息的 `account` 标签；Antigravity 条目的 `command` 填写自己 CLI 的绝对路径或 PATH 中的命令。示例命令名需自行替换。支持的分组键见 `watch/source/QuotaData.mc`。
+`sources.json` 中的 provider 必须与自己的 Magpie 配置对应。可增删条目或设置 `enabled: false`。WorkBuddy 的 Local、Global 来源分别填写 `region: "local"`、`region: "global"`；ZCode 根据 Magpie 的登录站点和 API 域名写入地区，不根据套餐名判断。其他多个账号可指定不含个人信息的 `account` 标签；Antigravity 条目的 `command` 填写自己 CLI 的绝对路径或 PATH 中的命令。示例命令名需自行替换。支持的分组键见 `watch/source/QuotaData.mc`。Magpie 配置默认读取 `~/.config/magpie`，可用 `MAGPIE_CONFIG_DIR` 指向其他位置。
 
 本地状态默认保存在 `~/.config/quota-watch/`。`QUOTA_CONFIG_DIR` 可改变整个目录，`QUOTA_SOURCES` 可指向独立的渠道配置文件。账号标签、Tibo 缓存、读写凭据和开发者签名私钥均属于本地配置。
 
-需要定时上传时，修改 `quota-watch-upload.service` 的 `WorkingDirectory`，在 `~/.config/quota-watch/upload.env` 填入 `QUOTA_ENDPOINT` 和包含 Node/CLI 的 `PATH`，再将 service 和 timer 安装到自己的 systemd 用户目录并启用 timer。
+需要定时上传和按需刷新时，修改两个 service 的 `WorkingDirectory`，在 `~/.config/quota-watch/upload.env` 填入 `QUOTA_ENDPOINT` 和包含 Node/CLI 的 `PATH`，再将 service、timer 安装到自己的 systemd 用户目录，启用 `quota-watch-upload.timer` 与 `quota-watch-refresh.service`。
 
 ## 编译两个手表应用
 
-需要 Garmin Connect IQ SDK、vívoactive 5 设备包、Java、`uv`、`fonttools`、`fontbm` 和 Noto Sans CJK 字体。Debian/Ubuntu 可安装 `fonts-noto-cjk`；构建脚本使用系统的 Regular/Bold TTC 简体中文 face，自动提取界面中文字形。
+需要 Garmin Connect IQ SDK、vívoactive 5 设备包、Java、`uv`、`fonttools`、`brotli`、`fontbm` 和 Noto Sans CJK 字体。Debian/Ubuntu 可安装 `fonts-noto-cjk`。构建脚本只提取界面实际使用的字符，中文字形来自 Noto Sans CJK。
+
+如果本机 Cedar 项目的 `frontend/src/assets/fonts/` 中存在 `Sans-Roman.woff2`，构建脚本会先用 `fontTools varLib.instancer` 生成 300、500 两个静态字重：大号百分比使用 300，标题、标签和倒计时使用 500。也可用 `CEDAR_FONT_DIR` 指向同样的字体目录。找不到本地 Sans 可变字体时，拉丁字母、数字和符号同样回退到 Noto。生成的字体子集、位图和资源清单都写入 Git 忽略的 `watch/private/`，不会进入公开仓库。
 
 将 Connect IQ SDK 路径设为 `CONNECTIQ_SDK`，将 fontbm 路径设为 `FONTBM`。默认路径分别是 `~/.local/share/garmin-connectiq/sdk` 和 `~/.local/bin/fontbm`。
 
@@ -73,6 +81,8 @@ Worker 的 `/design` 使用 `design/quota-v5.html`。在自己的模拟器中运
 ```text
 simulator.png
 simulator-detail.png
+simulator-zcode.png
+simulator-regions.png
 simulator-gpt-announced.png
 simulator-gpt.png
 simulator-claude.png
@@ -82,4 +92,4 @@ simulator-claude.png
 
 ## 许可
 
-源码使用 [MIT](LICENSE)。`watch/resources/fonts/` 的位图字形由 Noto Sans CJK SC 转换并取子集，使用独立的 [SIL OFL 1.1](watch/resources/fonts/OFL.txt)，版权和来源见 [NOTICE](watch/resources/fonts/NOTICE.txt)。品牌名称及商标归各自权利人所有。
+源码使用 [MIT](LICENSE)。公开仓库中的 Noto Sans CJK SC 位图字形使用独立的 [SIL OFL 1.1](watch/resources/fonts/OFL.txt)，版权和来源见 [NOTICE](watch/resources/fonts/NOTICE.txt)。本机构建产生的字体资源保存在 `watch/private/`。品牌名称及商标归各自权利人所有。

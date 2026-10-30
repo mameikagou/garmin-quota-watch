@@ -8,18 +8,36 @@ module QuotaData {
     const LABELS = ["GPT", "Claude", "AGY", "DEVIN", "OPENCODE", "ZCODE", "WORKBUDDY"];
     const COLORS = [0x73ebc0, 0xd97757, 0x4c8cf5, 0xb7a1f8, 0xf6be85, 0xfacc15, 0x22d3ee];
 
+    function groupAccounts(cards as Array, key as String) as Array<Dictionary> {
+        var result = [] as Array<Dictionary>;
+        if (key.equals("zcode") || key.equals("workbuddy")) {
+            var regions = ["local", "global"];
+            for (var regionIndex = 0; regionIndex < regions.size(); regionIndex++) {
+                for (var position = 0; position < cards.size(); position++) {
+                    var account = cards[position];
+                    if (account instanceof Dictionary && key.equals(account["group"])
+                            && regions[regionIndex].equals(account["region"]) && account["error"] == null) {
+                        result.add(account);
+                    }
+                }
+            }
+            return result;
+        }
+        for (var position = 0; position < cards.size(); position++) {
+            var account = cards[position];
+            if (account instanceof Dictionary && key.equals(account["group"]) && account["error"] == null) {
+                result.add(account);
+            }
+        }
+        return result;
+    }
+
     function build(snapshot) as Array<Dictionary> {
         var result = [] as Array<Dictionary>;
         if (!(snapshot instanceof Dictionary) || !(snapshot["cards"] instanceof Array)) { return result; }
         var cards = snapshot["cards"] as Array;
         for (var index = 0; index < KEYS.size(); index++) {
-            var accounts = [] as Array<Dictionary>;
-            for (var position = 0; position < cards.size(); position++) {
-                var account = cards[position];
-                if (account instanceof Dictionary && KEYS[index].equals(account["group"]) && account["error"] == null) {
-                    accounts.add(account);
-                }
-            }
+            var accounts = groupAccounts(cards, KEYS[index]);
             if (accounts.size() == 0) { continue; }
             var group = {"key" => KEYS[index], "title" => LABELS[index], "color" => COLORS[index], "accounts" => accounts};
             group["rows"] = rows(group);
@@ -28,7 +46,7 @@ module QuotaData {
         return result;
     }
 
-    function windows(key as String, account as Dictionary) as Array<Dictionary> {
+    function windows(key as String, account as Dictionary, detail as Boolean) as Array<Dictionary> {
         var result = [] as Array<Dictionary>;
         if (!(account["windows"] instanceof Array)) { return result; }
         var available = account["windows"] as Array;
@@ -38,7 +56,8 @@ module QuotaData {
             if (key.equals("gemini") && !"Gemini".equals(window["pool"])) { continue; }
             if (key.equals("zcode")) {
                 var name = window["name"] as String;
-                if (name.find("GLM-5.3") == null || name.find("Flash") != null || name.find("Gift") != null) { continue; }
+                if (name.find("Gift") != null || name.find("GLM-5.3") == null) { continue; }
+                if (!detail && name.find("Flash") != null) { continue; }
             }
             result.add(window);
         }
@@ -56,22 +75,43 @@ module QuotaData {
             "stamp" => window["resets_at_seconds"], "text" => null};
     }
 
+    function zcodeModel(window as Dictionary) as String {
+        return (window["name"] as String).find("Flash") == null ? "5.3" : "Flash";
+    }
+
+    function regionLabel(region as String) as String {
+        return region.equals("local") ? "Local" : "Global";
+    }
+
+    function zcodeLabel(account as Dictionary, window as Dictionary, available as Array<Dictionary>) as String {
+        var model = zcodeModel(window);
+        var matches = 0;
+        for (var index = 0; index < available.size(); index++) {
+            if (model.equals(zcodeModel(available[index]))) { matches += 1; }
+        }
+        var result = regionLabel(account["region"]) + " " + model;
+        if (matches > 1) {
+            result += (window["name"] as String).find("Start Plan") == null ? " 活动" : " 起步";
+        }
+        return result;
+    }
+
     function rows(group as Dictionary) as Array<Dictionary> {
         if ("gemini".equals(group["key"])) { return geminiRows(group); }
         var result = [] as Array<Dictionary>;
         var accounts = group["accounts"] as Array<Dictionary>;
         for (var index = 0; index < accounts.size(); index++) {
             var account = accounts[index];
-            var available = windows(group["key"], account);
+            var available = windows(group["key"], account, false);
             for (var position = 0; position < available.size(); position++) {
                 var window = available[position];
                 var row = makeRow(period(window["name"]), window);
                 if ("zcode".equals(group["key"])) {
-                    var kind = "起步";
-                    if ((window["name"] as String).find("1024") != null) { kind = "活动"; }
-                    row["label"] = account["account"] + " " + kind;
+                    row["label"] = zcodeLabel(account, window, available);
                 }
-                if ("workbuddy".equals(group["key"])) { creditRow(row, window, account["account"]); }
+                if ("workbuddy".equals(group["key"])) {
+                    creditRow(row, window, regionLabel(account["region"]));
+                }
                 result.add(row);
             }
         }
@@ -86,7 +126,7 @@ module QuotaData {
         for (var index = 0; index < names.size(); index++) {
             var row = null as Dictionary?;
             for (var position = 0; position < accounts.size(); position++) {
-                var available = windows("gemini", accounts[position]);
+                var available = windows("gemini", accounts[position], false);
                 for (var windowIndex = 0; windowIndex < available.size(); windowIndex++) {
                     var window = available[windowIndex];
                     if (!names[index].equals(window["name"])) { continue; }
@@ -118,7 +158,7 @@ module QuotaData {
 
     function addBalance(result as Array<Dictionary>, accounts as Array<Dictionary>) {
         for (var index = 0; index < accounts.size(); index++) {
-            var available = windows("claude", accounts[index]);
+            var available = windows("claude", accounts[index], false);
             for (var position = 0; position < available.size(); position++) {
                 var window = available[position];
                 if (!"USD".equals(window["unit"]) || window["amount"] == null || window["limit"] == null) { continue; }
@@ -156,9 +196,14 @@ module QuotaData {
     }
 
     function updated(snapshot) as String {
+        var time = updatedTime(snapshot);
+        return time.length() == 0 ? "" : time + " 更新";
+    }
+
+    function updatedTime(snapshot) as String {
         if (!(snapshot instanceof Dictionary) || snapshot["collected_at_seconds"] == null) { return ""; }
         var info = Gregorian.info(new Time.Moment(snapshot["collected_at_seconds"].toNumber()), Time.FORMAT_SHORT);
-        return info.hour.format("%02d") + ":" + info.min.format("%02d") + " 更新";
+        return info.hour.format("%02d") + ":" + info.min.format("%02d");
     }
 
     function beijingDay(stamp) as Number {

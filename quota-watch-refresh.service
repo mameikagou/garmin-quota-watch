@@ -1,0 +1,16 @@
+[Unit]
+Description=Refresh requested model quotas for Garmin
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/path/to/garmin-quota-watch
+EnvironmentFile=%h/.config/quota-watch/upload.env
+ExecStart=/usr/bin/env node refresh.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+UMask=0077
+
+[Install]
+WantedBy=default.target

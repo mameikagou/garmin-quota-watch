@@ -23,14 +23,20 @@ assert.equal((await request("/quota")).status, 401);
 assert.equal((await request("/quota", credentials.WRITE_TOKEN)).status, 401);
 assert.equal((await request("/quota", credentials.READ_TOKEN, "POST", "{}")).status, 401);
 assert.equal((await request("/quota", credentials.WRITE_TOKEN, "POST", "invalid-json")).status, 400);
+assert.equal((await request("/refresh/claude", null, "POST")).status, 401);
+assert.equal((await request("/refresh/claude", credentials.WRITE_TOKEN, "POST")).status, 401);
+assert.equal((await request("/refresh/unknown", credentials.READ_TOKEN, "POST")).status, 404);
+assert.equal((await request("/refresh/requests", credentials.READ_TOKEN)).status, 401);
 const response = await request("/quota", credentials.READ_TOKEN);
 assert.equal(response.status, 200);
 const snapshot = await response.json();
 assert(snapshot.cards.length > 0);
 assert(Number.isFinite(Date.parse(snapshot.collected_at)));
+assert(snapshot.collection_attempts && typeof snapshot.collection_attempts === "object");
 assert(snapshot.cards.some((card) => card.windows.length > 0 && !card.error));
 assert(snapshot.cards.every((card) => !Object.hasOwn(card, "user")));
 for (const source of sources) {
+  assert(Number.isFinite(Date.parse(snapshot.collection_attempts[source.group])), `${source.group} 应记录真实采集时间`);
   const cards = snapshot.cards.filter((card) => card.provider === source.provider);
   assert(cards.length > 0, `${source.provider} 应已上传`);
   assert(cards.every((card) => card.group === source.group && typeof card.account === "string"));
@@ -42,9 +48,17 @@ for (const provider of sources.filter((source) => ["zcode", "workbuddy"].include
   for (const card of cards) {
     assert.equal(card.error, undefined);
     assert.equal(card.source, "magpie");
+    assert(["local", "global"].includes(card.region));
+    assert.equal(card.account, card.region);
     assert(Number.isFinite(Date.parse(card.source_read_at)));
     assert(card.windows.length > 0);
     assert(card.windows.every((window) => Number.isFinite(window.remaining) && Number.isFinite(window.used)));
+  }
+}
+for (const group of ["zcode", "workbuddy"]) {
+  const cards = snapshot.cards.filter((card) => card.group === group && !card.error);
+  for (const region of ["local", "global"]) {
+    assert(cards.some((card) => card.region === region), `${group} 缺少${region}账号`);
   }
 }
 for (const provider of sources.filter((source) => source.kind === "antigravity").map((source) => source.provider)) {
@@ -88,14 +102,14 @@ if (process.argv.includes("--artifacts")) {
   const manifests = await Promise.all(["GPT", "Claude"].map(async (name) => parser.parse(
     await readFile(new URL(`./watch/private/${name}/manifest.xml`, import.meta.url), "utf8"))));
   assert.notEqual(manifests[0]["iq:manifest"]["iq:application"]["@_id"], manifests[1]["iq:manifest"]["iq:application"]["@_id"]);
-  for (const filename of ["GPT.prg", "Claude.prg", "simulator.png", "simulator-detail.png", "simulator-gpt.png", "simulator-gpt-announced.png", "simulator-claude.png"]) {
+  for (const filename of ["GPT.prg", "Claude.prg", "simulator.png", "simulator-detail.png", "simulator-zcode.png", "simulator-regions.png", "simulator-gpt.png", "simulator-gpt-announced.png", "simulator-claude.png"]) {
     const download = await request(`/${filename}`);
     assert.equal(download.status, 200);
     if (filename.endsWith(".prg")) assert(download.headers.get("content-disposition").includes(filename));
     const local = await readFile(new URL(`./watch/bin/${filename}`, import.meta.url));
     assert(Buffer.from(await download.arrayBuffer()).equals(local));
   }
-  console.log("两个独立应用和五张模拟器截图：直接下载及内容检查通过");
+  console.log("两个独立应用和七张模拟器截图：直接下载及内容检查通过");
 }
 console.log("真实 KV 读写通过；未授权访问、读写权限隔离、错误请求检查通过");
 console.log("Tibo 真实采集、十分钟请求间隔和并发缓存复用通过；生产快照使用真实公告");

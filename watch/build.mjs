@@ -32,40 +32,111 @@ try {
   await writeFile(keyPath, privateKey, { mode: 0o600, flag: "wx" });
 }
 
-const builder = new XMLBuilder({ ignoreAttributes: false });
+const builder = new XMLBuilder({ ignoreAttributes: false, suppressBooleanAttributes: false });
 const resource = builder.build({ resources: { properties: { property: [
   { "@_id": "ReadToken", "@_type": "string", "#text": credentials.READ_TOKEN },
   { "@_id": "QuotaEndpoint", "@_type": "string", "#text": endpoint },
 ] } } });
 await writeFile(join(directory, "private/resources/properties.xml"), resource, { mode: 0o600 });
-const sourceFiles = (await readdir(join(directory, "source"))).filter((filename) => filename.endsWith(".mc"));
-const sourceText = (await Promise.all(sourceFiles.map((filename) => readFile(join(directory, "source", filename), "utf8")))).join("\n");
-const chinese = [...new Set(sourceText.match(/\p{Script=Han}/gu))].join("");
-const ascii = Array.from({ length: 95 }, (_, index) => String.fromCodePoint(index + 32)).join("");
 const channelNames = "GPTClaudeAGYDEVINOPENCODEZCODEWORKBUDDY";
 const fonts = [
-  { name: "small", size: 16, weight: "Regular", characters: ascii + chinese + "·…" },
-  { name: "label", size: 18, weight: "Regular", characters: ascii + chinese + "·‹›…" },
-  { name: "numbers", size: 28, weight: "Regular", characters: "0123456789%." },
-  { name: "title", size: 24, weight: "Bold", characters: channelNames },
-  { name: "glance-label", size: 20, weight: "Bold", characters: "GPTClaude 余额0123456789$." },
-  { name: "glance-small", size: 16, weight: "Regular", characters: "Tibo0123456789: .·…hdm更新后今天明天重置前已" },
-  { name: "glance-number", size: 46, weight: "Regular", characters: "0123456789%." },
+  { name: "small", id: "Small", size: 16, weight: 500, characters: "0123456789/:. ·…hdmTibo更新刷新中失败离线后今天明天重置前已" },
+  { name: "label", id: "Label", size: 18, weight: 500, characters: channelNames + "LocalGlobalFlashAB5.30123456789/$%. 周日月积分余额活动起步返回总览‹›" },
+  { name: "numbers", id: "Numbers", size: 28, weight: 300, characters: "0123456789%." },
+  { name: "title", id: "Title", size: 24, weight: 500, characters: channelNames },
+  { name: "glance-label", id: "GlanceLabel", size: 20, weight: 500, characters: "GPTClaude 余额0123456789$.", scope: "glance" },
+  { name: "glance-small", id: "GlanceSmall", size: 16, weight: 500, characters: "Tibo0123456789:/. ·hdm更新后今天明天重置前已", scope: "glance" },
+  { name: "glance-number", id: "GlanceNumber", size: 46, weight: 300, characters: "0123456789%.", scope: "glance" },
 ];
-for (const font of fonts) {
-  const subset = join(directory, "private", `${font.name}.otf`);
-  execFileSync("uv", ["tool", "run", "--from", "fonttools", "pyftsubset",
-    `/usr/share/fonts/opentype/noto/NotoSansCJK-${font.weight}.ttc`,
-    "--font-number=2", `--text=${font.characters}`, `--output-file=${subset}`,
-  ], { stdio: "pipe" });
-  const characters = [...new Set(font.characters)].map((character) => character.codePointAt(0)).join(",");
+
+const fontBuildDirectory = join(directory, "private/font-build");
+const fontResourceDirectory = join(directory, "private/font-resources");
+const fontOutputDirectory = join(fontResourceDirectory, "fonts");
+await mkdir(fontBuildDirectory, { recursive: true, mode: 0o700 });
+await mkdir(fontOutputDirectory, { recursive: true, mode: 0o700 });
+
+async function localSansFile() {
+  const fontDirectory = process.env.CEDAR_FONT_DIR ?? join(homedir(), "mrlonely-code/cedar/frontend/src/assets/fonts");
+  try {
+    const filenames = await readdir(fontDirectory);
+    const filename = filenames.find((candidate) => candidate.endsWith("Sans-Roman.woff2"));
+    return filename == null ? null : join(fontDirectory, filename);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function fontTools(...arguments_) {
+  execFileSync("uv", ["tool", "run", "--from", "fonttools", "--with", "brotli", ...arguments_], { stdio: "pipe" });
+}
+
+function uniqueCharacters(value) {
+  return [...new Set(value)];
+}
+
+function separatedCharacters(value) {
+  const result = { latin: "", cjk: "" };
+  for (const character of uniqueCharacters(value)) {
+    if (/\p{Script=Han}/u.test(character)) result.cjk += character;
+    else result.latin += character;
+  }
+  return result;
+}
+
+function subsetFont(source, fontNumber, characters, output) {
+  const arguments_ = ["pyftsubset", source];
+  if (fontNumber != null) arguments_.push(`--font-number=${fontNumber}`);
+  arguments_.push(`--text=${characters}`, `--output-file=${output}`);
+  fontTools(...arguments_);
+}
+
+function bitmapFont(source, fontNumber, font, characters, outputName) {
+  const subset = join(fontBuildDirectory, `${outputName}.otf`);
+  subsetFont(source, fontNumber, characters, subset);
+  const codePoints = uniqueCharacters(characters).map((character) => character.codePointAt(0)).join(",");
   // Connect IQ 按灰度读取字形，黑底保留每一笔的抗锯齿亮度。
   execFileSync(process.env.FONTBM ?? join(homedir(), ".local/bin/fontbm"), [
-    "--font-file", subset, "--font-size", String(font.size), "--chars", characters, "--background-color", "0,0,0",
-    "--output", join(directory, "resources/fonts", font.name), "--texture-size", "256x256",
+    "--font-file", subset, "--font-size", String(font.size), "--chars", codePoints, "--background-color", "0,0,0",
+    "--output", join(fontOutputDirectory, outputName), "--texture-size", "256x256",
     "--texture-crop-width", "--texture-crop-height", "--spacing-horiz", "1", "--spacing-vert", "1",
   ], { stdio: "pipe" });
 }
+
+function fontResource(id, filename, scope) {
+  const result = { "@_id": id, "@_filename": `fonts/${filename}.fnt`, "@_antialias": "true" };
+  if (scope != null) result["@_scope"] = scope;
+  return result;
+}
+
+const localSans = await localSansFile();
+const latinSources = {};
+for (const weight of [300, 500]) {
+  if (localSans == null) {
+    latinSources[weight] = { path: `/usr/share/fonts/opentype/noto/NotoSansCJK-${weight === 300 ? "Regular" : "Bold"}.ttc`, number: 2 };
+    continue;
+  }
+  const instance = join(fontBuildDirectory, `sans-${weight}.ttf`);
+  fontTools("fonttools", "varLib.instancer", localSans, `wght=${weight}`, "--static", "-o", instance);
+  latinSources[weight] = { path: instance, number: null };
+}
+
+const fontResources = [];
+for (const font of fonts) {
+  const characters = separatedCharacters(font.characters);
+  const latinName = characters.cjk.length === 0 ? font.name : `${font.name}-latin`;
+  const latinId = characters.cjk.length === 0 ? font.id : `${font.id}Latin`;
+  const latinSource = latinSources[font.weight];
+  bitmapFont(latinSource.path, latinSource.number, font, characters.latin, latinName);
+  fontResources.push(fontResource(latinId, latinName, font.scope));
+  if (characters.cjk.length > 0) {
+    const cjkName = `${font.name}-cjk`;
+    const cjkId = `${font.id}Cjk`;
+    bitmapFont("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 2, font, characters.cjk, cjkName);
+    fontResources.push(fontResource(cjkId, cjkName, font.scope));
+  }
+}
+await writeFile(join(fontResourceDirectory, "fonts.xml"), builder.build({ resources: { fonts: { font: fontResources } } }));
 const variants = [
   { name: "GPT", key: "codex", id: "b9a68e252d4a461d9f2ce6cb6ef8cd10", icon: "gpt.png" },
   { name: "Claude", key: "claude", id: "a1c6278aab4d47b29cd4f162c2b4f113", icon: "cc.png" },
@@ -94,7 +165,7 @@ for (const variant of variants) {
   const jungle = [
     `project.manifest = ${join(target, "manifest.xml")}`,
     `base.sourcePath = ${join(directory, "source")};${join(target, "source")}`,
-    `base.resourcePath = ${join(directory, "resources")};${join(directory, "private/resources")};${join(target, "resources")}`,
+    `base.resourcePath = ${join(directory, "resources")};${fontResourceDirectory};${join(directory, "private/resources")};${join(target, "resources")}`,
   ].join("\n");
   await writeFile(join(target, "build.jungle"), jungle);
   const packaged = process.argv.includes("--package");

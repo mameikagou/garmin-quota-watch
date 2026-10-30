@@ -4,22 +4,72 @@ import Toybox.Math;
 import Toybox.Timer;
 import Toybox.WatchUi;
 
+(:glance)
+module QuotaText {
+    function isCjk(character) {
+        var codePoint = character.toNumber();
+        return codePoint >= 0x3400 && codePoint <= 0x9fff;
+    }
+    function resource(font as Array, cjk as Boolean) {
+        if (cjk && font[1] != null) { return font[1]; }
+        return font[0];
+    }
+    function width(dc, value as String, font as Array) {
+        var total = 0;
+        var run = "";
+        var runCjk = false;
+        var characters = value.toCharArray();
+        for (var index = 0; index < characters.size(); index++) {
+            var characterCjk = isCjk(characters[index]);
+            if (run.length() > 0 && characterCjk != runCjk) {
+                total += dc.getTextWidthInPixels(run, resource(font, runCjk));
+                run = "";
+            }
+            runCjk = characterCjk;
+            run += characters[index].toString();
+        }
+        if (run.length() > 0) { total += dc.getTextWidthInPixels(run, resource(font, runCjk)); }
+        return total;
+    }
+    function draw(dc, left, top, value as String, font as Array, color) {
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        var run = "";
+        var runCjk = false;
+        var cursor = left;
+        var characters = value.toCharArray();
+        for (var index = 0; index < characters.size(); index++) {
+            var characterCjk = isCjk(characters[index]);
+            if (run.length() > 0 && characterCjk != runCjk) {
+                var runFont = resource(font, runCjk);
+                dc.drawText(cursor, top + (runCjk ? font[2] : 0), runFont, run, Graphics.TEXT_JUSTIFY_LEFT);
+                cursor += dc.getTextWidthInPixels(run, runFont);
+                run = "";
+            }
+            runCjk = characterCjk;
+            run += characters[index].toString();
+        }
+        if (run.length() > 0) {
+            dc.drawText(cursor, top + (runCjk ? font[2] : 0), resource(font, runCjk), run, Graphics.TEXT_JUSTIFY_LEFT);
+        }
+    }
+}
+
 class QuotaCanvas extends WatchUi.View {
     var offset = 0;
     var contentHeight = 390;
     var hits as Array<Array<Number>> = [];
-    var small;
-    var label;
-    var number;
-    var title;
+    var small as Array;
+    var label as Array;
+    var number as Array;
+    var title as Array;
     var _timer;
 
     function initialize() {
         View.initialize();
-        small = WatchUi.loadResource(Rez.Fonts.Small);
-        label = WatchUi.loadResource(Rez.Fonts.Label);
-        number = WatchUi.loadResource(Rez.Fonts.Numbers);
-        title = WatchUi.loadResource(Rez.Fonts.Title);
+        small = [WatchUi.loadResource(Rez.Fonts.SmallLatin), WatchUi.loadResource(Rez.Fonts.SmallCjk), 0];
+        label = [WatchUi.loadResource(Rez.Fonts.LabelLatin), WatchUi.loadResource(Rez.Fonts.LabelCjk), 0];
+        number = [WatchUi.loadResource(Rez.Fonts.Numbers), null, 0];
+        title = [WatchUi.loadResource(Rez.Fonts.Title), null, 0];
         _timer = new Timer.Timer();
     }
     function onShow() { _timer.start(method(:tick), 30000, true); }
@@ -34,11 +84,10 @@ class QuotaCanvas extends WatchUi.View {
         WatchUi.requestUpdate();
     }
     function text(dc, left, top, value, font, color) {
-        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(left, top, font, value, Graphics.TEXT_JUSTIFY_LEFT);
+        QuotaText.draw(dc, left, top, value, font, color);
     }
     function centered(dc, top, value, font, color) {
-        text(dc, 195 - dc.getTextWidthInPixels(value, font) / 2, top, value, font, color);
+        text(dc, 195 - QuotaText.width(dc, value, font) / 2, top, value, font, color);
     }
     function safeWidth(top, height) {
         var distance = top - 195;
@@ -70,7 +119,7 @@ class QuotaCanvas extends WatchUi.View {
     }
     function cropped(dc, value, width, font) {
         var result = value;
-        while (result.length() > 0 && dc.getTextWidthInPixels(result, font) > width) {
+        while (result.length() > 0 && QuotaText.width(dc, result, font) > width) {
             result = result.substring(0, result.length() - 1);
         }
         return result;
@@ -135,17 +184,17 @@ class QuotaView extends QuotaCanvas {
         var color = depleted ? 0xff5252 : 0xf2f5f8;
         var countdown = QuotaData.countdown(row["stamp"]);
         if (countdown.length() > 0) {
-            var timeWidth = dc.getTextWidthInPixels(countdown, small);
+            var timeWidth = QuotaText.width(dc, countdown, small);
             text(dc, right - timeWidth, top + 9, countdown, small, depleted ? color : 0x9aaab8);
             right -= timeWidth + 5;
         }
         var value = QuotaData.value(row);
         var valueFont = row["text"] == null ? number : label;
-        var valueWidth = dc.getTextWidthInPixels(value, valueFont);
+        var valueWidth = QuotaText.width(dc, value, valueFont);
         text(dc, right - valueWidth, top + (row["text"] == null ? -1 : 7), value, valueFont, color);
         var rowLabel = row["label"] as String;
         text(dc, left, top + 7, rowLabel, label, depleted ? color : 0xc0cedb);
-        var start = left + dc.getTextWidthInPixels(rowLabel, label) + 7;
+        var start = left + QuotaText.width(dc, rowLabel, label) + 7;
         var length = right - valueWidth - start - 7;
         if (length > 0) { track(dc, [start, top + 23, length, 5], row, accent); }
     }
@@ -166,6 +215,14 @@ class QuotaView extends QuotaCanvas {
 class QuotaDetail extends QuotaCanvas {
     var _group as Dictionary;
     function initialize(group) { QuotaCanvas.initialize(); _group = group; }
+    function onShow() {
+        QuotaCanvas.onShow();
+        getQuotaApp().refreshGroup(_group["key"] as String);
+    }
+    function onHide() {
+        getQuotaApp().cancelDetailRefresh(_group["key"] as String);
+        QuotaCanvas.onHide();
+    }
     function onUpdate(dc) {
         dc.setColor(0x000000, 0x000000);
         dc.clear();
@@ -181,29 +238,35 @@ class QuotaDetail extends QuotaCanvas {
         dc.setColor(0x293440, Graphics.COLOR_TRANSPARENT);
         dc.drawRoundedRectangle(120, top, 150, 40, 20);
         centered(dc, top + 4, "‹ 返回总览", label, 0xc4d2dd);
-        var headingWidth = dc.getTextWidthInPixels(group["title"], title);
+        var headingWidth = QuotaText.width(dc, group["title"], title);
         dc.setColor(group["color"], Graphics.COLOR_TRANSPARENT);
         dc.fillCircle(195 - headingWidth / 2 - 12, top + 72, 4);
         centered(dc, top + 50, group["title"], title, group["color"]);
+        centered(dc, top + 80, QuotaData.updatedTime(getQuotaApp().snapshot), small,
+            getQuotaApp().detailRefreshing ? 0xffc66d : 0x82929e);
         var accounts = group["accounts"] as Array<Dictionary>;
-        top += 102;
+        top += 122;
         for (var index = 0; index < accounts.size(); index++) {
             top = drawAccount(dc, group, accounts[index], top, accounts.size() > 1);
         }
         contentHeight = top + offset + 16;
     }
     function drawAccount(dc, group as Dictionary, account as Dictionary, top, showName) {
-        if (showName && account["account"] != null && account["account"].length() > 0) {
-            centered(dc, top, account["account"], label, 0x8fa0af);
+        var accountName = account["account"];
+        if ("workbuddy".equals(group["key"])) { accountName = QuotaData.regionLabel(account["region"]); }
+        if (showName && !"zcode".equals(group["key"])
+                && accountName != null && accountName.length() > 0) {
+            centered(dc, top, accountName, label, 0x8fa0af);
             top += 32;
         }
-        var available = QuotaData.windows(group["key"], account);
+        var available = QuotaData.windows(group["key"], account, true);
         for (var index = 0; index < available.size(); index++) {
-            top = drawWindow(dc, top, available[index], group);
+            top = drawWindow(dc, top, available[index], group, account, available);
         }
         return top + 12;
     }
-    function drawWindow(dc, top, window as Dictionary, group as Dictionary) {
+    function drawWindow(dc, top, window as Dictionary, group as Dictionary,
+            account as Dictionary, available as Array<Dictionary>) {
         var reset = QuotaData.date(window["resets_at_seconds"]);
         var height = 96;
         if (reset.length() > 0) { height += 32; }
@@ -213,14 +276,13 @@ class QuotaDetail extends QuotaCanvas {
             box(dc, left, top, width, height);
             var name = QuotaData.period(window["name"]);
             if ("zcode".equals(group["key"])) {
-                name = "GLM-5.3 · 起步";
-                if ((window["name"] as String).find("1024") != null) { name = "GLM-5.3 · 活动"; }
+                name = QuotaData.zcodeLabel(account, window, available);
             }
             var row = QuotaData.makeRow(name, window);
             var value = QuotaData.value(row);
             var color = window["remaining"] == 0 ? 0xff5252 : 0xf2f5f8;
             text(dc, left + 14, top + 8, name, label, 0xd0dce5);
-            text(dc, left + width - 14 - dc.getTextWidthInPixels(value, number), top + 34, value, number, color);
+            text(dc, left + width - 14 - QuotaText.width(dc, value, number), top + 34, value, number, color);
             track(dc, [left + 14, top + 84, width - 28, 5], row, group["color"]);
             if (reset.length() > 0) {
                 reset += " · " + QuotaData.countdown(window["resets_at_seconds"]);
@@ -238,14 +300,14 @@ class QuotaDetail extends QuotaCanvas {
 
 (:glance)
 class QuotaGlance extends WatchUi.GlanceView {
-    var _label;
-    var _small;
-    var _number;
+    var _label as Array;
+    var _small as Array;
+    var _number as Array;
     function initialize() {
         GlanceView.initialize();
-        _label = WatchUi.loadResource(Rez.Fonts.GlanceLabel);
-        _small = WatchUi.loadResource(Rez.Fonts.GlanceSmall);
-        _number = WatchUi.loadResource(Rez.Fonts.GlanceNumber);
+        _label = [WatchUi.loadResource(Rez.Fonts.GlanceLabelLatin), WatchUi.loadResource(Rez.Fonts.GlanceLabelCjk), 0];
+        _small = [WatchUi.loadResource(Rez.Fonts.GlanceSmallLatin), WatchUi.loadResource(Rez.Fonts.GlanceSmallCjk), 0];
+        _number = [WatchUi.loadResource(Rez.Fonts.GlanceNumber), null, 0];
     }
     function onUpdate(dc) {
         dc.setColor(0xf2f5f8, 0x000000);
@@ -254,12 +316,12 @@ class QuotaGlance extends WatchUi.GlanceView {
         var height = dc.getHeight();
         draw(dc, 5, 0, QuotaVariant.TITLE, _label, 0xf2f5f8);
         var time = QuotaData.updated(getQuotaApp().snapshot);
-        draw(dc, width - dc.getTextWidthInPixels(time, _small) - 5, 4, time, _small, 0x82929e);
+        draw(dc, width - QuotaText.width(dc, time, _small) - 5, 4, time, _small, 0x82929e);
         var row = QuotaData.glanceValue(getQuotaApp().groups, QuotaVariant.KEY, "周");
         if (row == null) { return; }
         draw(dc, 5, 59, QuotaData.countdown(row["stamp"]) + " 后", _small, 0x82929e);
         var value = QuotaData.value(row);
-        draw(dc, width - dc.getTextWidthInPixels(value, _number) - 5, 19, value, _number,
+        draw(dc, width - QuotaText.width(dc, value, _number) - 5, 19, value, _number,
             row["remaining"] == 0 ? 0xff5252 : 0xf2f5f8);
         dc.setColor(0x202730, Graphics.COLOR_TRANSPARENT);
         dc.fillRoundedRectangle(5, 87, width - 10, 5, 2);
@@ -279,7 +341,6 @@ class QuotaGlance extends WatchUi.GlanceView {
         }
     }
     function draw(dc, left, top, value, font, color) {
-        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(left, top, font, value, Graphics.TEXT_JUSTIFY_LEFT);
+        QuotaText.draw(dc, left, top, value, font, color);
     }
 }

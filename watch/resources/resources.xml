@@ -1,11 +1,1 @@
-<resources>
-    <fonts>
-        <font id="Label" filename="fonts/label.fnt" antialias="true"/>
-        <font id="Numbers" filename="fonts/numbers.fnt" antialias="true"/>
-        <font id="Small" filename="fonts/small.fnt" antialias="true"/>
-        <font id="Title" filename="fonts/title.fnt" antialias="true"/>
-        <font id="GlanceLabel" filename="fonts/glance-label.fnt" antialias="true" scope="glance"/>
-        <font id="GlanceSmall" filename="fonts/glance-small.fnt" antialias="true" scope="glance"/>
-        <font id="GlanceNumber" filename="fonts/glance-number.fnt" antialias="true" scope="glance"/>
-    </fonts>
-</resources>
+<resources/>
